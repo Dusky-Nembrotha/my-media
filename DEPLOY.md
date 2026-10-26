@@ -95,7 +95,20 @@ fly ssh sftp get /data/mymedia.db ./mymedia-backup.db
 Worth doing occasionally — a Fly volume is a single disk, not a replicated store.
 There is also **Settings → Your data → Export JSON/CSV** in the app itself.
 
-## 5. Put the link where you can find it
+## 5. Let GitHub deploy it from then on
+
+The repo ships a deploy workflow that sits dormant until you give it a token:
+
+```bash
+fly tokens create deploy -x 999999h
+gh secret set FLY_API_TOKEN          # paste the token when prompted
+```
+
+After that every push to `main` deploys itself, and you never touch `fly deploy`
+again. Without the secret the workflow does nothing and passes, so it will not
+clutter the repo with failures.
+
+## 6. Put the link where you can find it
 
 Once `fly open` works, point the repo at it:
 
