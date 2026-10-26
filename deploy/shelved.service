@@ -1,6 +1,6 @@
 [Unit]
-Description=My Media — personal media log
-Documentation=https://github.com/Dusky-Nembrotha/my-media
+Description=Shelved — a log of everything you watch, read and listen to
+Documentation=https://github.com/Dusky-Nembrotha/shelved
 After=network-online.target
 Wants=network-online.target
 # The code lives on the external SSD, which udisks mounts after boot.
@@ -20,7 +20,7 @@ StartLimitBurst=5
 StartLimitIntervalSec=120
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=my-media
+SyslogIdentifier=shelved
 
 [Install]
 WantedBy=multi-user.target
