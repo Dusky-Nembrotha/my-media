@@ -10,6 +10,12 @@ import { get, run } from './db.js'
  */
 
 const SESSION_COOKIE = 'mm_session'
+/*
+ * Scope the cookie to wherever the app is mounted. On a shared hostname — a
+ * reverse proxy, or a Tailscale Funnel port hosting several services — a
+ * cookie at Path=/ would be sent to all the neighbours as well.
+ */
+const COOKIE_PATH = (process.env.MYMEDIA_BASE_PATH || '').replace(/\/$/, '') || '/'
 const SESSION_DAYS = 60
 const MAX_ATTEMPTS = 8
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
@@ -111,7 +117,7 @@ export function issueSession(res, req) {
   const secure = req.secure || req.get('x-forwarded-proto') === 'https'
   res.setHeader('Set-Cookie', [
     `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
-    'Path=/',
+    `Path=${COOKIE_PATH}`,
     'HttpOnly',
     'SameSite=Lax',
     `Max-Age=${SESSION_DAYS * 24 * 3600}`,
@@ -120,7 +126,7 @@ export function issueSession(res, req) {
 }
 
 export function clearSession(res) {
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`)
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=${COOKIE_PATH}; HttpOnly; SameSite=Lax; Max-Age=0`)
 }
 
 export function hasValidSession(req) {
