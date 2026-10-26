@@ -62,7 +62,17 @@ router.post('/import/analyse', async (req, res) => {
       try {
         const { records, filesUsed } = parseWith(candidate.id, members)
         const dry = applyRecords(records, { source: candidate.id, dryRun: true })
-        previews.push({ ...candidate, filesUsed, total: records.length, preview: dry })
+        const used = new Set(filesUsed)
+        previews.push({
+          ...candidate,
+          filesUsed,
+          // Anything in the upload this importer will not read. Worth showing:
+          // a silently skipped file looks exactly like missing data later.
+          filesIgnored: members.map((m) => m.filename).filter((f) => !used.has(f)),
+          total: records.length,
+          entries: records.filter((r) => r.kind === 'entry').length,
+          preview: dry,
+        })
       } catch (err) {
         previews.push({ ...candidate, error: err.message })
       }

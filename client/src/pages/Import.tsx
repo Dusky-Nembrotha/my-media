@@ -13,6 +13,8 @@ interface Candidate {
   confidence: number
   reason?: string
   filesUsed?: string[]
+  filesIgnored?: string[]
+  entries?: number
   total?: number
   options?: { key: string; label: string; type: string; default: any }[]
   preview?: {
@@ -211,7 +213,12 @@ export function ImportPage() {
                     <span className="u-row" style={{ gap: 8 }}>
                       <strong style={{ fontSize: 14 }}>{c.label}</strong>
                       <span className="pill">{Math.round(c.confidence * 100)}% match</span>
-                      {c.total ? <span className="u-xs u-mut">{fmtNumber(c.total)} records</span> : null}
+                      {c.total ? (
+                        <span className="u-xs u-mut">
+                          {fmtNumber(c.total)} rows
+                          {c.preview?.total && c.entries ? ` · ${fmtNumber(c.entries)} log entries` : ''}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="u-xs u-mut">{c.error ? `Could not parse: ${c.error}` : c.reason}</span>
                     {c.preview?.byType && (
@@ -281,7 +288,16 @@ export function ImportPage() {
               </div>
               {candidate.filesUsed?.length ? (
                 <p className="u-xs u-mut" style={{ margin: '10px 0 0' }}>
-                  Reading: {candidate.filesUsed.slice(0, 6).join(', ')}{candidate.filesUsed.length > 6 ? ` +${candidate.filesUsed.length - 6} more` : ''}
+                  Reading {candidate.filesUsed.length} file{candidate.filesUsed.length === 1 ? '' : 's'}:
+                  {' '}{candidate.filesUsed.slice(0, 6).join(', ')}{candidate.filesUsed.length > 6 ? ` +${candidate.filesUsed.length - 6} more` : ''}
+                </p>
+              ) : null}
+              {candidate.filesIgnored?.length ? (
+                <p className="u-xs" style={{ margin: '6px 0 0', color: 'var(--warn)' }}>
+                  <Icon name="filter" size={11} /> Not reading {candidate.filesIgnored.length} file
+                  {candidate.filesIgnored.length === 1 ? '' : 's'}: {candidate.filesIgnored.slice(0, 5).join(', ')}
+                  {candidate.filesIgnored.length > 5 ? ` +${candidate.filesIgnored.length - 5} more` : ''}
+                  {' '}— tell me if one of those holds data you expected.
                 </p>
               ) : null}
             </div>
