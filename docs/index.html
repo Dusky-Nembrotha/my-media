@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Media — a self-hosted log of everything you watch, read and listen to</title>
+<meta name="description" content="Log films, TV, books, audiobooks, music, podcasts and games. Imports from Letterboxd, Goodreads, Audible, Spotify, Trakt and more, with recommendations built from your own ratings.">
+<meta property="og:title" content="My Media">
+<meta property="og:description" content="A self-hosted log of everything you watch, read and listen to.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a090c'/%3E%3Cpath d='M9 8h4l3 7 3-7h4v16h-4v-8l-3 7-3-7v8H9z' fill='%23f472b6'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --canvas: #0a090c; --card: #131216; --ink: #f3f2f5; --ink-2: #afadb8; --ink-3: #7b7986;
+    --line: rgba(255,255,255,.09); --pink: #f472b6; --orange: #fb923c; --good: #4ec08c;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--font);
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--pink); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px 90px; }
+  header { padding: 80px 0 48px; }
+  .mark {
+    width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center;
+    font: 700 28px/1 var(--font); color: var(--pink);
+    background: rgba(244,114,182,.13); border: 1px solid rgba(244,114,182,.4); margin-bottom: 22px;
+  }
+  h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.05; letter-spacing: -.03em; margin: 0 0 14px; }
+  .lede { font-size: clamp(17px, 2.3vw, 20px); color: var(--ink-2); margin: 0 0 30px; max-width: 34em; }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px;
+    border-radius: 10px; font-weight: 620; font-size: 15px; text-decoration: none;
+    border: 1px solid var(--line); color: var(--ink); background: rgba(255,255,255,.04);
+  }
+  .btn:hover { background: rgba(255,255,255,.08); }
+  .btn--primary { background: var(--orange); color: #1b1205; border-color: transparent; }
+  .btn--primary:hover { background: #ffa65c; }
+  .note {
+    margin: 34px 0 0; padding: 16px 18px; border-radius: 12px; font-size: 14.5px; color: var(--ink-2);
+    background: rgba(244,114,182,.07); border: 1px solid rgba(244,114,182,.25);
+  }
+  .note strong { color: var(--ink); }
+  h2 { font-size: 22px; letter-spacing: -.02em; margin: 54px 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card { padding: 18px; border-radius: 13px; background: var(--card); border: 1px solid var(--line); }
+  .card h3 { margin: 0 0 6px; font-size: 15.5px; }
+  .card p { margin: 0; font-size: 14px; color: var(--ink-3); line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin-top: 8px; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); color: var(--ink-2); vertical-align: top; }
+  td strong { color: var(--ink); }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 11px; font-weight: 650; background: rgba(78,192,140,.14); color: var(--good); }
+  .tag--file { background: rgba(255,255,255,.07); color: var(--ink-3); }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; font-size: 13.5px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark">M</div>
+    <h1>Everything you watch, read and&nbsp;listen&nbsp;to — in one place.</h1>
+    <p class="lede">
+      Films, TV, books, audiobooks, music, podcasts and games. Import years of history
+      from the services you already use, and get recommendations built from your own
+      ratings rather than a popularity chart.
+    </p>
+    <div class="btns">
+      <a class="btn btn--primary" href="https://github.com/Dusky-Nembrotha/my-media">View the code</a>
+      <a class="btn" href="https://github.com/Dusky-Nembrotha/my-media/blob/main/DEPLOY.md">Run your own</a>
+    </div>
+
+    <p class="note">
+      <strong>This page is documentation, not the app.</strong> My Media is self-hosted:
+      it runs on your own machine or your own hosting, with your library in a SQLite file
+      you control. GitHub Pages can only serve static files, so the app itself cannot run
+      here — <a href="https://github.com/Dusky-Nembrotha/my-media/blob/main/DEPLOY.md">DEPLOY.md</a>
+      takes about five minutes.
+    </p>
+  </header>
+
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Logs properly</h3>
+      <p>Rewatches, rereads and per-season TV stack under one title instead of cluttering
+         the list. Half-star ratings, dates, reviews and progress.</p>
+    </div>
+    <div class="card">
+      <h3>Imports without duplicating</h3>
+      <p>Eleven services, auto-detected from whatever you drop in — whole ZIPs included.
+         Re-import the same export later and only the new rows land.</p>
+    </div>
+    <div class="card">
+      <h3>Explains its recommendations</h3>
+      <p>Works from how far above <em>your own</em> average you rate each genre, director,
+         author and decade. Every pick says why.</p>
+    </div>
+    <div class="card">
+      <h3>Remembers what people tell you</h3>
+      <p>A separate inbox for things you've been recommended, with who suggested it and
+         the reason. Logging it closes the loop.</p>
+    </div>
+    <div class="card">
+      <h3>Needs no API keys</h3>
+      <p>Artwork and metadata from Open Library, Apple, MusicBrainz, TVmaze, Wikipedia and
+         Wikidata. TMDB is an optional upgrade.</p>
+    </div>
+    <div class="card">
+      <h3>Keeps your data yours</h3>
+      <p>One SQLite file on your own disk. Nothing leaves it except the metadata lookups
+         needed to fetch artwork.</p>
+    </div>
+  </div>
+
+  <h2>Where your history comes from</h2>
+  <table>
+    <thead><tr><th>Service</th><th>Media</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Trakt</strong></td><td>Film, TV</td><td><span class="tag">Live sync</span> watch history, ratings, watchlist</td></tr>
+      <tr><td><strong>Last.fm</strong></td><td>Music</td><td><span class="tag">Live sync</span> full scrobble history</td></tr>
+      <tr><td><strong>Spotify</strong></td><td>Music, podcasts</td><td><span class="tag">Live sync</span> recent plays and saved albums</td></tr>
+      <tr><td><strong>Steam</strong></td><td>Games</td><td><span class="tag">Live sync</span> every game with playtime</td></tr>
+      <tr><td><strong>Letterboxd</strong></td><td>Film</td><td><span class="tag tag--file">File</span> diary, ratings, watchlist, lists</td></tr>
+      <tr><td><strong>Goodreads</strong></td><td>Books</td><td><span class="tag tag--file">File</span> shelves become status</td></tr>
+      <tr><td><strong>The StoryGraph</strong></td><td>Books</td><td><span class="tag tag--file">File</span> moods and pace kept as tags</td></tr>
+      <tr><td><strong>Audible</strong></td><td>Audiobooks</td><td><span class="tag tag--file">File</span> via an Amazon data request</td></tr>
+      <tr><td><strong>IMDb</strong></td><td>Film, TV</td><td><span class="tag tag--file">File</span> ratings converted to stars</td></tr>
+      <tr><td><strong>Netflix</strong></td><td>Film, TV</td><td><span class="tag tag--file">File</span> episodes grouped per season</td></tr>
+      <tr><td><strong>JustWatch</strong></td><td>Film, TV</td><td><span class="tag tag--file">File</span> watchlist and seen list</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Running it</h2>
+  <pre><code>git clone https://github.com/Dusky-Nembrotha/my-media.git
+cd my-media
+npm install --no-bin-links
+npm run build
+npm start                 # http://localhost:4123</code></pre>
+  <p style="color:var(--ink-3);font-size:14.5px">
+    Needs Node 22.5 or newer. For a public URL with a password on it, see
+    <a href="https://github.com/Dusky-Nembrotha/my-media/blob/main/DEPLOY.md">DEPLOY.md</a>.
+  </p>
+
+  <footer>
+    Source on <a href="https://github.com/Dusky-Nembrotha/my-media">GitHub</a>.
+    Metadata from TMDB, Open Library, MusicBrainz, TVmaze, Apple and Wikidata.
+  </footer>
+</div>
+</body>
+</html>
