@@ -1,11 +1,27 @@
 # My Media
 
+### ▶ Open the app
+
+> **Not deployed yet.** Follow [**DEPLOY.md**](DEPLOY.md) to put it on a public URL,
+> then this line becomes the link. Running it on your own machine instead?
+> [Start here](#running-it) — it is three commands.
+
+<!-- Once deployed, replace the block above with:
+### ▶ [Open the app](https://my-media.fly.dev)
+-->
+
+**[Deploy guide](DEPLOY.md)** · **[Data model](docs/DATA-MODEL.md)** ·
+**[What it does](#what-it-does)** · **[Connections](#connect)** · **[Imports](#import)**
+
+---
+
 A self-hosted log of everything you watch, read and listen to — films, TV, books,
 audiobooks, music, podcasts and games — with imports from the services you already
 use and a recommendation engine built from your own ratings.
 
-Runs on this machine, stores everything in one SQLite file, and sends nothing
-anywhere except the metadata lookups needed to fetch artwork.
+Runs on your own machine or your own hosting, stores everything in one SQLite file,
+and sends nothing anywhere except the metadata lookups needed to fetch artwork.
+Behind a password the moment it is reachable from outside your network.
 
 ---
 

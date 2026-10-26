@@ -95,6 +95,21 @@ fly ssh sftp get /data/mymedia.db ./mymedia-backup.db
 Worth doing occasionally — a Fly volume is a single disk, not a replicated store.
 There is also **Settings → Your data → Export JSON/CSV** in the app itself.
 
+## 5. Put the link where you can find it
+
+Once `fly open` works, point the repo at it:
+
+```bash
+# the "About" link on the GitHub repo page
+gh repo edit --homepage https://my-media.fly.dev
+```
+
+and swap the placeholder at the top of `README.md` for:
+
+```markdown
+### ▶ [Open the app](https://my-media.fly.dev)
+```
+
 ---
 
 ## Afterwards
