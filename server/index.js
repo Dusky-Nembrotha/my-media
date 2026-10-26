@@ -1,0 +1,47 @@
+import express from 'express'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { router as library } from './routes/library.js'
+import { router as recs } from './routes/recs.js'
+import { router as stats } from './routes/stats.js'
+import { router as imports } from './routes/imports.js'
+import { router as misc } from './routes/misc.js'
+import { router as connections } from './routes/connections.js'
+
+const app = express()
+const PORT = Number(process.env.PORT || 4123)
+const root = join(import.meta.dirname, '..')
+const dist = join(root, 'dist')
+
+app.use(express.json({ limit: '5mb' }))
+app.disable('x-powered-by')
+
+app.use('/api', library)
+app.use('/api', recs)
+app.use('/api', stats)
+app.use('/api', imports)
+app.use('/api', misc)
+app.use('/api', connections)
+
+app.use('/api', (req, res) => res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` }))
+app.use((err, req, res, next) => {
+  console.error('[api error]', err)
+  if (res.headersSent) return next(err)
+  res.status(500).json({ error: err.message || 'Something went wrong' })
+})
+
+if (existsSync(dist)) {
+  app.use(express.static(dist, { maxAge: '1h', index: false }))
+  app.get('*', (req, res) => res.sendFile(join(dist, 'index.html')))
+} else {
+  app.get('/', (req, res) => res.status(503).type('html').send(
+    '<pre style="font:14px ui-monospace;padding:2rem;color:#eee;background:#111">'
+    + 'My Media: the client is not built yet.\n\nRun  npm run build  then reload,\n'
+    + 'or  npm run dev  for the hot-reloading dev server on :5173.</pre>',
+  ))
+}
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n  My Media — http://localhost:${PORT}`)
+  console.log(`  On your network: http://<this-machine>:${PORT}\n`)
+})

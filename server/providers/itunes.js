@@ -1,0 +1,101 @@
+import { fetchJson } from '../lib/http.js'
+import { parseYear, splitPeople } from '../lib/util.js'
+
+// Keyless, no sign-up, covers films, TV, music, audiobooks, podcasts and ebooks.
+const BASE = 'https://itunes.apple.com'
+const COUNTRY = process.env.MYMEDIA_STORE || 'GB'
+
+const ENTITY = {
+  film: 'movie',
+  tv: 'tvSeason',
+  album: 'album',
+  track: 'song',
+  audiobook: 'audiobook',
+  podcast: 'podcast',
+  book: 'ebook',
+}
+
+function art(url, size = 600) {
+  if (!url) return null
+  return url.replace(/\/\d+x\d+(bb)?\.(jpg|png)$/i, `/${size}x${size}bb.jpg`)
+}
+
+function normalise(item, type) {
+  const title = item.trackName || item.collectionName || item.artistName || ''
+  if (!title) return null
+  const creators = []
+  if (type === 'film') {
+    for (const name of splitPeople(item.artistName)) creators.push({ role: 'Director', name })
+  } else if (type === 'tv' || type === 'podcast') {
+    if (item.artistName) creators.push({ role: 'Network', name: item.artistName })
+  } else if (type === 'audiobook') {
+    for (const name of splitPeople(item.artistName)) creators.push({ role: 'Author', name })
+  } else if (type === 'book') {
+    for (const name of splitPeople(item.artistName)) creators.push({ role: 'Author', name })
+  } else {
+    if (item.artistName) creators.push({ role: 'Artist', name: item.artistName })
+  }
+
+  const runtimeMs = item.trackTimeMillis || item.collectionTimeMillis
+  return {
+    provider: 'itunes',
+    type,
+    title: title.replace(/,\s*(Season|Series)\s+(\d+)$/i, ', Season $2'),
+    year: parseYear(item.releaseDate),
+    release_date: item.releaseDate ? item.releaseDate.slice(0, 10) : null,
+    creators,
+    genres: [item.primaryGenreName, ...(item.genres || [])].filter(Boolean),
+    overview: item.longDescription || item.description || item.shortDescription || null,
+    runtime: runtimeMs ? Math.round(runtimeMs / 60000) : null,
+    episodes: item.trackCount && type === 'tv' ? item.trackCount : null,
+    language: item.country || null,
+    poster_url: art(item.artworkUrl100 || item.artworkUrl60, 600),
+    backdrop_url: art(item.artworkUrl100 || item.artworkUrl60, 1200),
+    itunes_id: String(item.trackId || item.collectionId || item.id || ''),
+    metadata: {
+      itunes_url: item.trackViewUrl || item.collectionViewUrl,
+      content_rating: item.contentAdvisoryRating,
+      track_count: item.trackCount,
+      artist_id: item.artistId,
+      collection_id: item.collectionId,
+      price: item.trackPrice ?? item.collectionPrice,
+    },
+  }
+}
+
+export async function search(type, term, limit = 12) {
+  const entity = ENTITY[type]
+  if (!entity || !term) return []
+  const url = `${BASE}/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=${limit}&country=${COUNTRY}`
+  try {
+    const data = await fetchJson(url, { ttlSeconds: 60 * 60 * 24 * 14 })
+    return (data.results || []).map((r) => normalise(r, type)).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+export async function lookup(type, itunesId) {
+  try {
+    const data = await fetchJson(`${BASE}/lookup?id=${encodeURIComponent(itunesId)}&country=${COUNTRY}`)
+    const item = (data.results || [])[0]
+    return item ? normalise(item, type) : null
+  } catch {
+    return null
+  }
+}
+
+/** Everything else by the same artist/author/director — our keyless candidate source. */
+export async function byArtist(type, artistId, limit = 20) {
+  const entity = ENTITY[type]
+  if (!entity || !artistId) return []
+  try {
+    const data = await fetchJson(
+      `${BASE}/lookup?id=${artistId}&entity=${entity}&limit=${limit}&country=${COUNTRY}`,
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    return (data.results || []).slice(1).map((r) => normalise(r, type)).filter(Boolean)
+  } catch {
+    return []
+  }
+}

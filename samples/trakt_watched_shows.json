@@ -1,0 +1,1375 @@
+[
+ {
+  "plays": 19,
+  "last_watched_at": "2023-01-03T21:40:00.000Z",
+  "rating": 10,
+  "show": {
+   "title": "Severance",
+   "year": 2022,
+   "ids": {
+    "trakt": 1000,
+    "slug": "severance",
+    "imdb": "tt11280740",
+    "tmdb": 90000
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-01-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-01-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-01-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-01-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-01-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-01-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-01-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-01-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-01-17T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 2,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-01-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-01-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-01-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-01-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-01-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-01-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-01-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-01-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-01-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2023-01-19T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 28,
+  "last_watched_at": "2024-02-04T21:40:00.000Z",
+  "rating": 9,
+  "show": {
+   "title": "The Bear",
+   "year": 2022,
+   "ids": {
+    "trakt": 1001,
+    "slug": "the-bear",
+    "imdb": "tt14452776",
+    "tmdb": 90001
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-02-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-02-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-02-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-02-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-02-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-02-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-02-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-02-15T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 2,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-02-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-02-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-02-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-02-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-02-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-02-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-02-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-02-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-02-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-02-19T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 3,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-02-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-02-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-02-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-02-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-02-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-02-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-02-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-02-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-02-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-02-19T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 39,
+  "last_watched_at": "2023-03-05T21:40:00.000Z",
+  "rating": 10,
+  "show": {
+   "title": "Succession",
+   "year": 2018,
+   "ids": {
+    "trakt": 1002,
+    "slug": "succession",
+    "imdb": "tt7660850",
+    "tmdb": 90002
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-03-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-03-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-03-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-03-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-03-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-03-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-03-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-03-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-03-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2023-03-19T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 2,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-03-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-03-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-03-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-03-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-03-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-03-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-03-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-03-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-03-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2023-03-19T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 3,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-03-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-03-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-03-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-03-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-03-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-03-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-03-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-03-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-03-17T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 4,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-03-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-03-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-03-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-03-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-03-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-03-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-03-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-03-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-03-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2023-03-19T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 13,
+  "last_watched_at": "2024-04-06T21:40:00.000Z",
+  "rating": 10,
+  "show": {
+   "title": "Better Call Saul",
+   "year": 2015,
+   "ids": {
+    "trakt": 1003,
+    "slug": "better-call-saul",
+    "imdb": "tt3032476",
+    "tmdb": 90003
+   }
+  },
+  "seasons": [
+   {
+    "number": 6,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-04-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-04-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-04-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-04-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-04-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-04-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-04-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-04-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-04-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-04-19T21:40:00.000Z"
+     },
+     {
+      "number": 11,
+      "plays": 1,
+      "last_watched_at": "2024-04-21T21:40:00.000Z"
+     },
+     {
+      "number": 12,
+      "plays": 1,
+      "last_watched_at": "2024-04-23T21:40:00.000Z"
+     },
+     {
+      "number": 13,
+      "plays": 1,
+      "last_watched_at": "2024-04-25T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 5,
+  "last_watched_at": "2023-05-07T21:40:00.000Z",
+  "rating": 10,
+  "show": {
+   "title": "Chernobyl",
+   "year": 2019,
+   "ids": {
+    "trakt": 1004,
+    "slug": "chernobyl",
+    "imdb": "tt7366338",
+    "tmdb": 90004
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-05-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-05-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-05-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-05-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-05-09T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 8,
+  "last_watched_at": "2024-06-08T21:40:00.000Z",
+  "rating": 9,
+  "show": {
+   "title": "The Leftovers",
+   "year": 2014,
+   "ids": {
+    "trakt": 1005,
+    "slug": "the-leftovers",
+    "imdb": "tt2699128",
+    "tmdb": 90005
+   }
+  },
+  "seasons": [
+   {
+    "number": 3,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-06-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-06-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-06-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-06-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-06-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-06-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-06-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-06-15T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 6,
+  "last_watched_at": "2023-07-09T21:40:00.000Z",
+  "rating": 9,
+  "show": {
+   "title": "Fleabag",
+   "year": 2016,
+   "ids": {
+    "trakt": 1006,
+    "slug": "fleabag",
+    "imdb": "tt5687612",
+    "tmdb": 90006
+   }
+  },
+  "seasons": [
+   {
+    "number": 2,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-07-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-07-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-07-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-07-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-07-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-07-11T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 18,
+  "last_watched_at": "2024-08-10T21:40:00.000Z",
+  "rating": 8,
+  "show": {
+   "title": "Dark",
+   "year": 2017,
+   "ids": {
+    "trakt": 1007,
+    "slug": "dark",
+    "imdb": "tt5753856",
+    "tmdb": 90007
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-08-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-08-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-08-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-08-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-08-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-08-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-08-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-08-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-08-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-08-19T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 2,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-08-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-08-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-08-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-08-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-08-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-08-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-08-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-08-15T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 12,
+  "last_watched_at": "2023-09-11T21:40:00.000Z",
+  "rating": 9,
+  "show": {
+   "title": "Andor",
+   "year": 2022,
+   "ids": {
+    "trakt": 1008,
+    "slug": "andor",
+    "imdb": "tt9253284",
+    "tmdb": 90008
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-09-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-09-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-09-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-09-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-09-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-09-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-09-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-09-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-09-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2023-09-19T21:40:00.000Z"
+     },
+     {
+      "number": 11,
+      "plays": 1,
+      "last_watched_at": "2023-09-21T21:40:00.000Z"
+     },
+     {
+      "number": 12,
+      "plays": 1,
+      "last_watched_at": "2023-09-23T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 10,
+  "last_watched_at": "2024-10-12T21:40:00.000Z",
+  "rating": 9,
+  "show": {
+   "title": "Shōgun",
+   "year": 2024,
+   "ids": {
+    "trakt": 1009,
+    "slug": "sh-gun",
+    "imdb": "tt2788316",
+    "tmdb": 90009
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-10-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-10-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-10-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-10-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-10-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-10-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-10-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-10-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-10-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-10-19T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 12,
+  "last_watched_at": "2023-11-13T21:40:00.000Z",
+  "rating": 8,
+  "show": {
+   "title": "Slow Horses",
+   "year": 2022,
+   "ids": {
+    "trakt": 1010,
+    "slug": "slow-horses",
+    "imdb": "tt5057054",
+    "tmdb": 90010
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-11-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-11-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-11-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-11-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-11-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-11-11T21:40:00.000Z"
+     }
+    ]
+   },
+   {
+    "number": 2,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-11-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-11-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-11-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-11-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-11-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-11-11T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 12,
+  "last_watched_at": "2024-12-14T21:40:00.000Z",
+  "rating": 9,
+  "show": {
+   "title": "I May Destroy You",
+   "year": 2020,
+   "ids": {
+    "trakt": 1011,
+    "slug": "i-may-destroy-you",
+    "imdb": "tt9174558",
+    "tmdb": 90011
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-12-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-12-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-12-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-12-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-12-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-12-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-12-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-12-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-12-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-12-19T21:40:00.000Z"
+     },
+     {
+      "number": 11,
+      "plays": 1,
+      "last_watched_at": "2024-12-21T21:40:00.000Z"
+     },
+     {
+      "number": 12,
+      "plays": 1,
+      "last_watched_at": "2024-12-23T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 10,
+  "last_watched_at": "2023-01-15T21:40:00.000Z",
+  "rating": 8,
+  "show": {
+   "title": "Atlanta",
+   "year": 2016,
+   "ids": {
+    "trakt": 1012,
+    "slug": "atlanta",
+    "imdb": "tt4288182",
+    "tmdb": 90012
+   }
+  },
+  "seasons": [
+   {
+    "number": 1,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2023-01-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2023-01-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2023-01-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2023-01-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2023-01-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2023-01-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2023-01-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2023-01-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2023-01-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2023-01-19T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "plays": 13,
+  "last_watched_at": "2024-02-16T21:40:00.000Z",
+  "rating": 10,
+  "show": {
+   "title": "The Wire",
+   "year": 2002,
+   "ids": {
+    "trakt": 1013,
+    "slug": "the-wire",
+    "imdb": "tt0306414",
+    "tmdb": 90013
+   }
+  },
+  "seasons": [
+   {
+    "number": 4,
+    "episodes": [
+     {
+      "number": 1,
+      "plays": 1,
+      "last_watched_at": "2024-02-01T21:40:00.000Z"
+     },
+     {
+      "number": 2,
+      "plays": 1,
+      "last_watched_at": "2024-02-03T21:40:00.000Z"
+     },
+     {
+      "number": 3,
+      "plays": 1,
+      "last_watched_at": "2024-02-05T21:40:00.000Z"
+     },
+     {
+      "number": 4,
+      "plays": 1,
+      "last_watched_at": "2024-02-07T21:40:00.000Z"
+     },
+     {
+      "number": 5,
+      "plays": 1,
+      "last_watched_at": "2024-02-09T21:40:00.000Z"
+     },
+     {
+      "number": 6,
+      "plays": 1,
+      "last_watched_at": "2024-02-11T21:40:00.000Z"
+     },
+     {
+      "number": 7,
+      "plays": 1,
+      "last_watched_at": "2024-02-13T21:40:00.000Z"
+     },
+     {
+      "number": 8,
+      "plays": 1,
+      "last_watched_at": "2024-02-15T21:40:00.000Z"
+     },
+     {
+      "number": 9,
+      "plays": 1,
+      "last_watched_at": "2024-02-17T21:40:00.000Z"
+     },
+     {
+      "number": 10,
+      "plays": 1,
+      "last_watched_at": "2024-02-19T21:40:00.000Z"
+     },
+     {
+      "number": 11,
+      "plays": 1,
+      "last_watched_at": "2024-02-21T21:40:00.000Z"
+     },
+     {
+      "number": 12,
+      "plays": 1,
+      "last_watched_at": "2024-02-23T21:40:00.000Z"
+     },
+     {
+      "number": 13,
+      "plays": 1,
+      "last_watched_at": "2024-02-25T21:40:00.000Z"
+     }
+    ]
+   }
+  ]
+ }
+]

@@ -1,0 +1,128 @@
+/*
+ * My Media — design tokens.
+ * Dark is the designed default; the light theme is a selected set of steps,
+ * not an automatic inversion.
+ */
+:root {
+  color-scheme: dark;
+
+  /* canvas + surfaces — plain near-black, so the pink does the talking */
+  --canvas: #0a090c;
+  --canvas-2: #131216;
+  --surface-1: rgba(255, 255, 255, 0.038);
+  --surface-2: rgba(255, 255, 255, 0.065);
+  --surface-3: rgba(255, 255, 255, 0.1);
+  --glass: rgba(16, 15, 19, 0.78);
+  --hairline: rgba(255, 255, 255, 0.085);
+  --hairline-strong: rgba(255, 255, 255, 0.15);
+
+  /* ink */
+  --ink: #f3f2f5;
+  --ink-2: #afadb8;
+  --ink-3: #7b7986;
+  --ink-4: #53515c;
+
+  /* Chrome highlight: pink, 7.5:1 on the canvas. */
+  --accent: #f472b6;
+  --accent-ink: #21050f;
+  --accent-soft: rgba(244, 114, 182, 0.14);
+  --accent-line: rgba(244, 114, 182, 0.4);
+
+  /* Primary actions are orange so they carry against all that purple:
+     8.2:1 behind --action-ink. */
+  --action: #fb923c;
+  --action-ink: #1b1205;
+  --action-soft: rgba(251, 146, 60, 0.14);
+
+  /* Stars keep their conventional gold. */
+  --star: #e3a84a;
+
+  /* section hues, for navigation identity */
+  --hue-film: #e3a84a;
+  --hue-tv: #9085e9;
+  --hue-book: #4ec08c;
+  --hue-audiobook: #4aa8d8;
+  --hue-album: #e0738f;
+  --hue-track: #5fb37a;
+  --hue-podcast: #e08a4a;
+  --hue-game: #8f93f0;
+
+  /* validated chart palette (dark steps, re-checked against surface #120e1b) */
+  --viz-primary: #3987e5;
+  --viz-amber: #c98500;
+  --viz-seq-1: #184f95;
+  --viz-seq-2: #256abf;
+  --viz-seq-3: #3987e5;
+  --viz-seq-4: #6da7ec;
+  --viz-seq-5: #9ec5f4;
+  --viz-grid: rgba(255, 255, 255, 0.07);
+  --viz-surface: #131216;
+
+  /* status */
+  --good: #4ec08c;
+  --warn: #e0a33c;
+  --bad: #e66767;
+
+  /* type */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Hoefler Text", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* shape + motion */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 13px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --r-full: 999px;
+  --ease: cubic-bezier(0.22, 0.75, 0.2, 1);
+  --fast: 130ms var(--ease);
+  --mid: 220ms var(--ease);
+  --slow: 420ms var(--ease);
+
+  /* elevation */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.55);
+  --shadow-2: 0 6px 20px -6px rgba(0, 0, 0, 0.75);
+  --shadow-3: 0 22px 50px -18px rgba(0, 0, 0, 0.9);
+
+  /* layout */
+  --rail: 248px;
+  --rail-collapsed: 76px;
+  --gutter: clamp(16px, 3.2vw, 40px);
+  --topbar: 64px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --canvas: #f7f6f3;
+  --canvas-2: #fffefc;
+  --surface-1: rgba(14, 16, 22, 0.035);
+  --surface-2: rgba(14, 16, 22, 0.06);
+  --surface-3: rgba(14, 16, 22, 0.09);
+  --glass: rgba(255, 254, 252, 0.8);
+  --hairline: rgba(14, 16, 22, 0.1);
+  --hairline-strong: rgba(14, 16, 22, 0.18);
+  --ink: #15181f;
+  --ink-2: #4b515e;
+  --ink-3: #6e7585;
+  --ink-4: #969cab;
+  --accent: #be185d;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(190, 24, 93, 0.09);
+  --accent-line: rgba(190, 24, 93, 0.34);
+  --action: #c2410c;
+  --action-ink: #ffffff;
+  --action-soft: rgba(194, 65, 12, 0.12);
+  --star: #a8752a;
+  --viz-primary: #2a78d6;
+  --viz-amber: #eda100;
+  --viz-seq-1: #cde2fb;
+  --viz-seq-2: #9ec5f4;
+  --viz-seq-3: #5598e7;
+  --viz-seq-4: #2a78d6;
+  --viz-seq-5: #184f95;
+  --viz-grid: rgba(14, 16, 22, 0.08);
+  --viz-surface: #fffefc;
+  --shadow-2: 0 6px 20px -8px rgba(26, 24, 20, 0.22);
+  --shadow-3: 0 22px 50px -20px rgba(26, 24, 20, 0.3);
+}

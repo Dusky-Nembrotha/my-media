@@ -1,0 +1,27 @@
+{
+ "tracks": [],
+ "artists": [],
+ "albums": [
+  {
+   "artist": "Nala Sinephro",
+   "album": "Endlessness",
+   "uri": "spotify:album:aaa111"
+  },
+  {
+   "artist": "MJ Lenderman",
+   "album": "Manning Fireworks",
+   "uri": "spotify:album:bbb222"
+  },
+  {
+   "artist": "Tyler, The Creator",
+   "album": "CHROMAKOPIA",
+   "uri": "spotify:album:ccc333"
+  }
+ ],
+ "shows": [
+  {
+   "name": "Song Exploder",
+   "publisher": "Hrishikesh Hirway"
+  }
+ ]
+}

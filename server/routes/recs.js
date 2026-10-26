@@ -1,0 +1,162 @@
+import { Router } from 'express'
+import { all, get, run, json } from '../lib/db.js'
+import { recommend, blockRecommendation, profileSummary } from '../recommend.js'
+import { enrich } from '../providers/index.js'
+import { upsertWork } from '../lib/works.js'
+import { queueEnrichment } from '../enrich.js'
+import { normaliseTitle, today, TYPES } from '../lib/util.js'
+
+export const router = Router()
+
+/* ------------------------------------------------ the "check this out" inbox */
+
+function recOf(r) {
+  return {
+    id: r.id,
+    work_id: r.work_id,
+    type: r.type,
+    title: r.title,
+    year: r.year,
+    creators: json(r.creators, []),
+    poster_url: r.poster_url,
+    recommender: r.recommender,
+    source_url: r.source_url,
+    note: r.note,
+    priority: r.priority,
+    status: r.status,
+    origin: r.origin,
+    engine_reason: r.engine_reason,
+    added_at: r.added_at,
+    acted_at: r.acted_at,
+  }
+}
+
+router.get('/recs', (req, res) => {
+  const status = req.query.status || 'open'
+  const type = req.query.type && req.query.type !== 'all' ? req.query.type : null
+  const rows = all(
+    `SELECT * FROM recs
+      WHERE (? = 'all' OR status = ?) AND (? IS NULL OR type = ?)
+      ORDER BY priority DESC, added_at DESC`,
+    status, status, type, type,
+  )
+  res.json({
+    recs: rows.map(recOf),
+    counts: Object.fromEntries(
+      all('SELECT status, count(*) c FROM recs GROUP BY status').map((r) => [r.status, r.c]),
+    ),
+  })
+})
+
+/** POST /api/recs — jot down something someone told you to watch/read. */
+router.post('/recs', async (req, res) => {
+  const { title, type, year, recommender, note, source_url, priority, creators, enrichNow = true } = req.body
+  if (!title) return res.status(400).json({ error: 'A title is required' })
+
+  let poster_url = req.body.poster_url || null
+  let resolved = { year: year ?? null, creators: creators || [] }
+  if (enrichNow && type) {
+    try {
+      const hit = await enrich({ type, title, year, creators })
+      if (hit) {
+        poster_url = poster_url || hit.poster_url
+        resolved = { year: year ?? hit.year, creators: creators?.length ? creators : (hit.creators || []).slice(0, 3) }
+      }
+    } catch { /* a recommendation without artwork is still a recommendation */ }
+  }
+
+  const existingWork = type
+    ? all('SELECT id, title FROM works WHERE type = ?', type)
+      .find((w) => normaliseTitle(w.title) === normaliseTitle(title))
+    : null
+
+  const stmt = run(
+    `INSERT INTO recs (work_id, type, title, year, creators, poster_url, recommender, source_url, note, priority, status, origin, added_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,'open','manual',?)`,
+    existingWork?.id ?? null, type || null, title, resolved.year ?? null,
+    JSON.stringify(resolved.creators || []), poster_url, recommender || null, source_url || null,
+    note || null, priority ?? 1, today(),
+  )
+  res.json(recOf(get('SELECT * FROM recs WHERE id = ?', Number(stmt.lastInsertRowid))))
+})
+
+router.patch('/recs/:id', (req, res) => {
+  const id = Number(req.params.id)
+  const patch = {}
+  for (const k of ['title', 'type', 'year', 'recommender', 'note', 'source_url', 'priority', 'status', 'poster_url']) {
+    if (k in req.body) patch[k] = req.body[k]
+  }
+  if (patch.status === 'done' || patch.status === 'dismissed') patch.acted_at = new Date().toISOString()
+  const keys = Object.keys(patch)
+  if (!keys.length) return res.status(400).json({ error: 'Nothing to update' })
+  run(`UPDATE recs SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => patch[k]), id)
+  res.json(recOf(get('SELECT * FROM recs WHERE id = ?', id)))
+})
+
+router.delete('/recs/:id', (req, res) => {
+  run('DELETE FROM recs WHERE id = ?', Number(req.params.id))
+  res.json({ ok: true })
+})
+
+/* ------------------------------------------------------- the taste engine */
+
+router.get('/recommendations', async (req, res) => {
+  const type = String(req.query.type || 'film')
+  if (!TYPES.includes(type)) return res.status(400).json({ error: 'Unknown type' })
+  try {
+    const result = await recommend(type, {
+      limit: Math.min(24, Number(req.query.limit) || 12),
+      force: req.query.force === '1',
+      breadth: Number(req.query.breadth) || 1,
+    })
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/recommendations/dismiss', (req, res) => {
+  const { fingerprint, reason } = req.body
+  if (!fingerprint) return res.status(400).json({ error: 'fingerprint is required' })
+  blockRecommendation(fingerprint, reason)
+  res.json({ ok: true })
+})
+
+/** Move an engine suggestion into the inbox so it is not forgotten. */
+router.post('/recommendations/save', (req, res) => {
+  const p = req.body.pick
+  if (!p?.title) return res.status(400).json({ error: 'pick.title is required' })
+  const stmt = run(
+    `INSERT INTO recs (type, title, year, creators, poster_url, recommender, note, priority, status, origin, engine_reason, engine_score, added_at)
+     VALUES (?,?,?,?,?,?,?,?,'open','engine',?,?,?)`,
+    p.type || null, p.title, p.year ?? null, JSON.stringify(p.creators || []), p.poster_url || null,
+    'My Media taste engine', (p.reasons || []).join(' · ') || null, req.body.priority ?? 1,
+    (p.reasons || []).join(' · ') || null, p.score ?? null, today(),
+  )
+  res.json(recOf(get('SELECT * FROM recs WHERE id = ?', Number(stmt.lastInsertRowid))))
+})
+
+/** Log an engine suggestion (or an inbox item) straight away. */
+router.post('/recommendations/log', async (req, res) => {
+  const p = req.body.pick || req.body
+  if (!p?.title || !p?.type) return res.status(400).json({ error: 'title and type are required' })
+  let seed = {
+    type: p.type, title: p.title, year: p.year, creators: p.creators,
+    poster_url: p.poster_url, genres: p.genres, overview: p.overview,
+    tmdb_id: p.ids?.tmdb_id, imdb_id: p.ids?.imdb_id, isbn: p.ids?.isbn, olid: p.ids?.olid,
+  }
+  const { work, created } = upsertWork(seed)
+  if (created || !work.poster_url) queueEnrichment([work.id])
+  run(
+    `INSERT INTO entries (work_id, status, rating, consumed_on, source) VALUES (?, 'completed', ?, ?, 'recommendation')`,
+    work.id, req.body.rating ?? null, req.body.consumed_on === undefined ? today() : req.body.consumed_on,
+  )
+  if (req.body.rec_id) {
+    run("UPDATE recs SET status = 'done', acted_at = datetime('now'), work_id = ? WHERE id = ?", work.id, Number(req.body.rec_id))
+  }
+  res.json({ ok: true, work_id: work.id })
+})
+
+router.get('/profile', (req, res) => {
+  res.json(profileSummary())
+})
