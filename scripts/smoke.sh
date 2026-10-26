@@ -1,7 +1,36 @@
 #!/bin/bash
-# End-to-end smoke test against a running server.
+# End-to-end smoke test.
+#
+# Runs against its own throwaway database on a spare port, so it can never
+# touch the library you actually use. Pass --live to point it at a server you
+# are already running (http://localhost:4123) instead.
 set -u
-B=http://localhost:4123/api
+
+PORT=${SMOKE_PORT:-4199}
+B=http://localhost:$PORT/api
+OWN_SERVER=1
+[ "${1:-}" = "--live" ] && { B=http://localhost:4123/api; OWN_SERVER=0; }
+
+TMPDATA=""
+cleanup() {
+  [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null
+  [ -n "$TMPDATA" ] && rm -rf "$TMPDATA"
+}
+trap cleanup EXIT
+
+if [ "$OWN_SERVER" = "1" ]; then
+  TMPDATA=$(mktemp -d)
+  MYMEDIA_DATA="$TMPDATA" PORT=$PORT node server/index.js > "$TMPDATA/server.log" 2>&1 &
+  SERVER_PID=$!
+  for _ in $(seq 1 40); do
+    curl -s -o /dev/null "$B/health" && break
+    sleep 0.25
+  done
+  echo "(isolated server on :$PORT, database in $TMPDATA)"
+  # Give it the sample library so the import checks have something to re-import.
+  curl -s -X POST "$B/import/samples" -o /dev/null
+fi
+
 j() { node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);console.log(eval(process.argv[1]))}catch(e){console.log('PARSE FAIL:',d.slice(0,160))}})" "$1"; }
 pass() { printf "  \033[32mok\033[0m   %s\n" "$1"; }
 fail() { printf "  \033[31mFAIL\033[0m %s\n" "$1"; }

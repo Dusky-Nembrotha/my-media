@@ -1,6 +1,7 @@
 import { all, get, run, tx, json } from '../lib/db.js'
 import { upsertWork } from '../lib/works.js'
 import { slugify, normaliseTitle, today } from '../lib/util.js'
+import { systemUserId } from '../lib/user.js'
 import { queueEnrichment, queueAllRecArtwork } from '../enrich.js'
 
 /**
@@ -150,10 +151,10 @@ function applyEntry(r, work, source, summary) {
 
 
   run(
-    `INSERT INTO entries (work_id, status, rating, liked, consumed_on, is_repeat, season, episode,
+    `INSERT INTO entries (user_id, work_id, status, rating, liked, consumed_on, is_repeat, season, episode,
        progress, review, notes, tags, source, external_key)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    work.id, r.status || 'completed', r.rating ?? null, r.liked ? 1 : 0, r.consumed_on || null,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    systemUserId(), work.id, r.status || 'completed', r.rating ?? null, r.liked ? 1 : 0, r.consumed_on || null,
     r.is_repeat ? 1 : 0, r.season ?? null, r.episode ?? null, r.progress || null,
     r.review || null, r.notes || null, JSON.stringify(r.tags || []), source, r.external_key || null,
   )
@@ -181,10 +182,10 @@ function applyRec(r, source, summary) {
   if (dupeTitle) { summary.entriesSkipped++; return }
 
   run(
-    `INSERT INTO recs (work_id, type, title, year, creators, poster_url, recommender, source_url,
+    `INSERT INTO recs (user_id, work_id, type, title, year, creators, poster_url, recommender, source_url,
        note, priority, status, origin, external_key, added_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    existingWork?.id ?? null, r.type || null, r.title, r.year ?? null,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    systemUserId(), existingWork?.id ?? null, r.type || null, r.title, r.year ?? null,
     JSON.stringify(r.creators || []), r.poster_url || existingWork?.poster_url || null,
     r.recommender || source, r.source_url || null, r.note || null, r.priority ?? 1,
     'open', 'import', r.external_key || null, r.added_at || today(),
@@ -197,7 +198,7 @@ function applyList(r, work, summary) {
   const slug = slugify(name)
   let list = get('SELECT * FROM lists WHERE slug = ?', slug)
   if (!list) {
-    run('INSERT INTO lists (name, slug, description) VALUES (?, ?, ?)', name, slug, `Imported from ${r.source || 'an export'}`)
+    run('INSERT INTO lists (user_id, name, slug, description) VALUES (?, ?, ?, ?)', systemUserId(), name, slug, `Imported from ${r.source || 'an export'}`)
     list = get('SELECT * FROM lists WHERE slug = ?', slug)
   }
   run(

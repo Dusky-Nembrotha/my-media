@@ -5,6 +5,15 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+-- Who the per-user rows belong to. One row today; the column exists so that
+-- adding more people later is a filter change, not a data migration.
+CREATE TABLE IF NOT EXISTS users (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO users (id, name) VALUES (1, 'me');
+
 CREATE TABLE IF NOT EXISTS works (
   id              INTEGER PRIMARY KEY,
   type            TEXT NOT NULL,              -- film|tv|book|audiobook|album|track|podcast|game
@@ -49,6 +58,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS works_imdb_idx ON works(type, imdb_id) WHERE i
 CREATE TABLE IF NOT EXISTS entries (
   id            INTEGER PRIMARY KEY,
   work_id       INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  user_id       INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   status        TEXT NOT NULL DEFAULT 'completed', -- completed|in_progress|abandoned|planned
   rating        REAL,                              -- 0.5 .. 5 in half steps
   liked         INTEGER NOT NULL DEFAULT 0,
@@ -75,6 +85,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS entries_external_idx ON entries(external_key) 
 CREATE TABLE IF NOT EXISTS recs (
   id             INTEGER PRIMARY KEY,
   work_id        INTEGER REFERENCES works(id) ON DELETE SET NULL,
+  user_id       INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   type           TEXT,
   title          TEXT NOT NULL,
   year           INTEGER,
@@ -97,6 +108,7 @@ CREATE INDEX IF NOT EXISTS recs_status_idx ON recs(status, priority DESC, added_
 
 CREATE TABLE IF NOT EXISTS lists (
   id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   name        TEXT NOT NULL,
   slug        TEXT NOT NULL UNIQUE,
   description TEXT,
@@ -114,6 +126,7 @@ CREATE TABLE IF NOT EXISTS list_items (
 
 CREATE TABLE IF NOT EXISTS import_runs (
   id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   source      TEXT NOT NULL,
   filename    TEXT,
   status      TEXT NOT NULL DEFAULT 'running', -- running|done|failed
@@ -143,6 +156,7 @@ CREATE TABLE IF NOT EXISTS http_cache (
 -- Cached output of the recommendation engine (recomputed on demand).
 CREATE TABLE IF NOT EXISTS rec_cache (
   id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   type        TEXT NOT NULL,
   payload     TEXT NOT NULL,
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -151,13 +165,15 @@ CREATE TABLE IF NOT EXISTS rec_cache (
 -- Candidates the engine has learned you do not want to see again.
 CREATE TABLE IF NOT EXISTS rec_blocks (
   fingerprint TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   reason      TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Live service connections (OAuth tokens, API keys, sync state).
 CREATE TABLE IF NOT EXISTS connections (
-  id            TEXT PRIMARY KEY,            -- trakt | lastfm | spotify | steam ...
+  id            TEXT PRIMARY KEY,
+  user_id       INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),            -- trakt | lastfm | spotify | steam ...
   status        TEXT NOT NULL DEFAULT 'disconnected', -- disconnected|pending|connected|error
   config        TEXT NOT NULL DEFAULT '{}',  -- JSON: the ids/keys you pasted in
   tokens        TEXT NOT NULL DEFAULT '{}',  -- JSON: access/refresh tokens + expiry

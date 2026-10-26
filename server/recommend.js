@@ -1,5 +1,6 @@
 import { all, get, run, json } from './lib/db.js'
 import { normaliseTitle, decade, uniqueBy, clamp } from './lib/util.js'
+import { systemUserId } from './lib/user.js'
 import { tmdb, itunes, ol, mb, tvmaze, wiki } from './providers/index.js'
 import * as wikidata from './providers/wikidata.js'
 
@@ -528,12 +529,15 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
   }
 
   run('DELETE FROM rec_cache WHERE type = ?', type)
-  run("INSERT INTO rec_cache (type, payload, computed_at) VALUES (?, ?, datetime('now'))", type, JSON.stringify(payload))
+  run(
+    "INSERT INTO rec_cache (user_id, type, payload, computed_at) VALUES (?, ?, ?, datetime('now'))",
+    systemUserId(), type, JSON.stringify(payload),
+  )
   return { ...payload, cached: false }
 }
 
 export function blockRecommendation(fingerprint, reason) {
-  run('INSERT OR REPLACE INTO rec_blocks (fingerprint, reason) VALUES (?, ?)', fingerprint, reason || null)
+  run('INSERT OR REPLACE INTO rec_blocks (user_id, fingerprint, reason) VALUES (?, ?, ?)', systemUserId(), fingerprint, reason || null)
 }
 
 /** The "your taste, in numbers" panel. */

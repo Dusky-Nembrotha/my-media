@@ -3,6 +3,7 @@ import { all, get, run, json, DATA_DIR } from '../lib/db.js'
 import { getSettings, saveSettings, publicSettings } from '../lib/settings.js'
 import { clearCache } from '../lib/http.js'
 import { slugify } from '../lib/util.js'
+import { currentUserId } from '../lib/user.js'
 import { WORK_CARD_SQL, hydrate } from '../lib/works.js'
 import { toCsv } from '../lib/csv.js'
 import { queueAll } from '../enrich.js'
@@ -50,7 +51,7 @@ router.post('/lists', (req, res) => {
   if (!name) return res.status(400).json({ error: 'A name is required' })
   let slug = slugify(name)
   if (get('SELECT id FROM lists WHERE slug = ?', slug)) slug = `${slug}-${Date.now().toString(36).slice(-4)}`
-  const stmt = run('INSERT INTO lists (name, slug, description, ranked) VALUES (?,?,?,?)', name, slug, description || null, ranked ? 1 : 0)
+  const stmt = run('INSERT INTO lists (user_id, name, slug, description, ranked) VALUES (?,?,?,?,?)', currentUserId(req), name, slug, description || null, ranked ? 1 : 0)
   res.json(get('SELECT * FROM lists WHERE id = ?', Number(stmt.lastInsertRowid)))
 })
 

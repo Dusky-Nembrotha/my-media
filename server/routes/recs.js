@@ -5,6 +5,7 @@ import { enrich } from '../providers/index.js'
 import { upsertWork } from '../lib/works.js'
 import { queueEnrichment } from '../enrich.js'
 import { normaliseTitle, today, TYPES } from '../lib/util.js'
+import { currentUserId } from '../lib/user.js'
 
 export const router = Router()
 
@@ -71,9 +72,9 @@ router.post('/recs', async (req, res) => {
     : null
 
   const stmt = run(
-    `INSERT INTO recs (work_id, type, title, year, creators, poster_url, recommender, source_url, note, priority, status, origin, added_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,'open','manual',?)`,
-    existingWork?.id ?? null, type || null, title, resolved.year ?? null,
+    `INSERT INTO recs (user_id, work_id, type, title, year, creators, poster_url, recommender, source_url, note, priority, status, origin, added_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,'open','manual',?)`,
+    currentUserId(req), existingWork?.id ?? null, type || null, title, resolved.year ?? null,
     JSON.stringify(resolved.creators || []), poster_url, recommender || null, source_url || null,
     note || null, priority ?? 1, today(),
   )
@@ -127,9 +128,9 @@ router.post('/recommendations/save', (req, res) => {
   const p = req.body.pick
   if (!p?.title) return res.status(400).json({ error: 'pick.title is required' })
   const stmt = run(
-    `INSERT INTO recs (type, title, year, creators, poster_url, recommender, note, priority, status, origin, engine_reason, engine_score, added_at)
-     VALUES (?,?,?,?,?,?,?,?,'open','engine',?,?,?)`,
-    p.type || null, p.title, p.year ?? null, JSON.stringify(p.creators || []), p.poster_url || null,
+    `INSERT INTO recs (user_id, type, title, year, creators, poster_url, recommender, note, priority, status, origin, engine_reason, engine_score, added_at)
+     VALUES (?,?,?,?,?,?,?,?,?,'open','engine',?,?,?)`,
+    currentUserId(req), p.type || null, p.title, p.year ?? null, JSON.stringify(p.creators || []), p.poster_url || null,
     'My Media taste engine', (p.reasons || []).join(' · ') || null, req.body.priority ?? 1,
     (p.reasons || []).join(' · ') || null, p.score ?? null, today(),
   )
@@ -148,8 +149,8 @@ router.post('/recommendations/log', async (req, res) => {
   const { work, created } = upsertWork(seed)
   if (created || !work.poster_url) queueEnrichment([work.id])
   run(
-    `INSERT INTO entries (work_id, status, rating, consumed_on, source) VALUES (?, 'completed', ?, ?, 'recommendation')`,
-    work.id, req.body.rating ?? null, req.body.consumed_on === undefined ? today() : req.body.consumed_on,
+    `INSERT INTO entries (user_id, work_id, status, rating, consumed_on, source) VALUES (?, ?, 'completed', ?, ?, 'recommendation')`,
+    currentUserId(req), work.id, req.body.rating ?? null, req.body.consumed_on === undefined ? today() : req.body.consumed_on,
   )
   if (req.body.rec_id) {
     run("UPDATE recs SET status = 'done', acted_at = datetime('now'), work_id = ? WHERE id = ?", work.id, Number(req.body.rec_id))

@@ -4,6 +4,7 @@ import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
 import { searchProviders, searchAllTypes } from '../providers/index.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
+import { currentUserId } from '../lib/user.js'
 
 export const router = Router()
 
@@ -182,9 +183,9 @@ router.post('/log', (req, res) => {
     if (created || !saved.poster_url) queueEnrichment([saved.id])
   }
   const stmt = run(
-    `INSERT INTO entries (work_id, status, rating, liked, consumed_on, is_repeat, season, progress, review, notes, tags, source)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,'manual')`,
-    id, status || 'completed', rating ?? null, liked ? 1 : 0,
+    `INSERT INTO entries (user_id, work_id, status, rating, liked, consumed_on, is_repeat, season, progress, review, notes, tags, source)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'manual')`,
+    currentUserId(req), id, status || 'completed', rating ?? null, liked ? 1 : 0,
     consumed_on === undefined ? today() : consumed_on || null,
     is_repeat ? 1 : 0, season ?? null, progress || null, review || null, notes || null,
     JSON.stringify(tags || []),

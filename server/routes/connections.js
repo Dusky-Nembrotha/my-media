@@ -4,6 +4,7 @@ import { loadConnection, saveConnection, forgetConnection, redactConfig } from '
 import { applyRecords } from '../importers/apply.js'
 import { all, get, run } from '../lib/db.js'
 import { getSettings } from '../lib/settings.js'
+import { currentUserId } from '../lib/user.js'
 
 export const router = Router()
 
@@ -201,8 +202,8 @@ router.post('/connections/:id/sync', async (req, res) => {
   if (conn.status !== 'connected') return res.status(400).json({ error: `${connector.label} is not connected yet` })
 
   const runRow = run(
-    "INSERT INTO import_runs (source, filename, status) VALUES (?, 'live sync', 'running')",
-    connector.id,
+    "INSERT INTO import_runs (user_id, source, filename, status) VALUES (?, ?, 'live sync', 'running')",
+    currentUserId(req), connector.id,
   )
   const runId = Number(runRow.lastInsertRowid)
 

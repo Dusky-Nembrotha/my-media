@@ -14,6 +14,35 @@ export const db = new DatabaseSync(join(dataDir, 'mymedia.db'))
 
 db.exec(readFileSync(join(here, 'schema.sql'), 'utf8'))
 
+/*
+ * Migrations for databases created before a column existed. Each is written to
+ * be safe to run repeatedly: we look before we leap, and never drop anything.
+ */
+function hasColumn(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column)
+}
+
+function addColumn(table, column, definition) {
+  if (hasColumn(table, column)) return false
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  return true
+}
+
+const migrated = [
+  // Ownership, so that supporting more than one person later is a filter
+  // change rather than a data migration.
+  ['entries', 'user_id'], ['recs', 'user_id'], ['lists', 'user_id'],
+  ['import_runs', 'user_id'], ['rec_cache', 'user_id'], ['rec_blocks', 'user_id'],
+  ['connections', 'user_id'],
+].filter(([table, column]) => addColumn(table, column, 'INTEGER NOT NULL DEFAULT 1'))
+
+if (migrated.length) {
+  console.log(`  migrated: added ${migrated.map(([t]) => t).join(', ')}.user_id`)
+}
+
+// Indexes that depend on migrated columns, so they come after the ALTERs.
+db.exec('CREATE INDEX IF NOT EXISTS entries_user_idx ON entries(user_id, consumed_on DESC)')
+
 /** Rows as plain objects (node:sqlite returns null-prototype objects). */
 export function all(sql, ...params) {
   return db.prepare(sql).all(...params).map((r) => ({ ...r }))

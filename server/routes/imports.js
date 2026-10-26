@@ -8,6 +8,7 @@ import { explode, detect, parseWith, catalogue, getImporter } from '../importers
 import { applyRecords } from '../importers/apply.js'
 import { guessMapping } from '../importers/generic.js'
 import { state as enrichState, queueAll, queueAllRecArtwork, recState } from '../enrich.js'
+import { currentUserId, systemUserId } from '../lib/user.js'
 
 export const router = Router()
 
@@ -111,8 +112,8 @@ router.post('/import/apply', async (req, res) => {
   if (typeof opts === 'string') { try { opts = JSON.parse(opts) } catch { opts = {} } }
 
   const runRow = run(
-    "INSERT INTO import_runs (source, filename, status) VALUES (?, ?, 'running')",
-    source, stage.uploads.join(', ').slice(0, 300),
+    "INSERT INTO import_runs (user_id, source, filename, status) VALUES (?, ?, ?, 'running')",
+    currentUserId(req), source, stage.uploads.join(', ').slice(0, 300),
   )
   const runId = Number(runRow.lastInsertRowid)
 
@@ -179,9 +180,9 @@ router.post('/import/samples', (req, res) => {
     const { records } = parseWith(source, members)
     const summary = applyRecords(records, { source, filename: 'bundled sample', enrich: false })
     run(
-      `INSERT INTO import_runs (source, filename, status, works_added, entries_added, entries_skipped, recs_added, detail, finished_at)
-       VALUES (?, 'bundled sample', 'done', ?, ?, ?, ?, ?, datetime('now'))`,
-      source, summary.worksAdded, summary.entriesAdded, summary.entriesSkipped, summary.recsAdded, JSON.stringify(summary),
+      `INSERT INTO import_runs (user_id, source, filename, status, works_added, entries_added, entries_skipped, recs_added, detail, finished_at)
+       VALUES (?, ?, 'bundled sample', 'done', ?, ?, ?, ?, ?, datetime('now'))`,
+      systemUserId(), source, summary.worksAdded, summary.entriesAdded, summary.entriesSkipped, summary.recsAdded, JSON.stringify(summary),
     )
     summaries.push({ source, ...summary })
   }

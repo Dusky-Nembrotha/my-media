@@ -1,4 +1,5 @@
 import { all, get, run, json } from '../lib/db.js'
+import { systemUserId } from '../lib/user.js'
 
 /** Everything persisted about one connected service. */
 export function loadConnection(id) {
@@ -29,13 +30,14 @@ export function saveConnection(id, patch) {
   const current = loadConnection(id)
   const next = { ...current, ...patch }
   run(
-    `INSERT INTO connections (id, status, config, tokens, account, pending, last_sync_at, last_result, message)
-     VALUES (?,?,?,?,?,?,?,?,?)
+    `INSERT INTO connections (id, user_id, status, config, tokens, account, pending, last_sync_at, last_result, message)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET
        status = excluded.status, config = excluded.config, tokens = excluded.tokens,
        account = excluded.account, pending = excluded.pending, last_sync_at = excluded.last_sync_at,
        last_result = excluded.last_result, message = excluded.message, updated_at = datetime('now')`,
     id,
+    systemUserId(),
     next.status || 'disconnected',
     JSON.stringify(next.config || {}),
     JSON.stringify(next.tokens || {}),
