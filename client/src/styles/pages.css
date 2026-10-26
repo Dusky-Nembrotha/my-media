@@ -740,3 +740,13 @@ code {
   overflow-wrap: anywhere;
 }
 .steplink:hover { text-decoration-color: var(--accent); }
+
+.importedline {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--good);
+}
+.importedline strong { font-weight: 680; }

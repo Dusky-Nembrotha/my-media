@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { catalogue, getConnector } from '../connections/index.js'
 import { loadConnection, saveConnection, forgetConnection, redactConfig } from '../connections/store.js'
 import { applyRecords } from '../importers/apply.js'
-import { run } from '../lib/db.js'
+import { all, get, run } from '../lib/db.js'
 import { getSettings } from '../lib/settings.js'
 
 export const router = Router()
@@ -24,15 +24,41 @@ function publicState(connector, conn) {
   }
 }
 
+/**
+ * What each service has actually put in the library. A file import is just as
+ * real as a live connection, so the card should say so.
+ */
+function importHistory() {
+  const bySource = new Map()
+  for (const row of all('SELECT source, count(*) c, max(created_at) last FROM entries GROUP BY source')) {
+    bySource.set(row.source, { entries: row.c, lastEntry: row.last, recs: 0, runs: 0, lastImport: null, lastImportEntries: null })
+  }
+  for (const row of all(
+    `SELECT source, count(*) runs, max(started_at) last_at,
+            sum(entries_added) added, sum(recs_added) recs
+       FROM import_runs WHERE status = 'done' GROUP BY source`,
+  )) {
+    const entry = bySource.get(row.source) || { entries: 0, lastEntry: null, recs: 0 }
+    entry.runs = row.runs
+    entry.lastImport = row.last_at
+    entry.lastImportEntries = row.added
+    entry.recs = row.recs || 0
+    bySource.set(row.source, entry)
+  }
+  return bySource
+}
+
 router.get('/connections', (req, res) => {
   const cat = catalogue()
   const settings = getSettings()
+  const history = importHistory()
+  const withHistory = (s) => ({ ...s, history: history.get(s.id) || null })
   res.json({
     live: cat.live.map((c) => {
       const connector = getConnector(c.id)
-      return { ...c, state: publicState(connector, loadConnection(c.id)) }
+      return { ...withHistory(c), state: publicState(connector, loadConnection(c.id)) }
     }),
-    fileOnly: cat.fileOnly,
+    fileOnly: cat.fileOnly.map(withHistory),
     metadata: cat.metadata.map((m) => ({
       ...m,
       connected: m.settingKey ? Boolean(settings[m.settingKey]) : true,

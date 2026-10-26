@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { api } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
-import { SECTION_META, relDate } from '../lib/format'
+import { SECTION_META, fmtDate, relDate } from '../lib/format'
 import type { MediaType } from '../lib/types'
 
 interface Field { key: string; label: string; secret?: boolean; help?: string; default?: string }
@@ -20,6 +20,7 @@ interface LiveService {
   fields: Field[]
   instructions: string[]
   options: Option[]
+  history?: History | null
   state: {
     status: 'disconnected' | 'pending' | 'connected' | 'error'
     account: string | null
@@ -30,6 +31,15 @@ interface LiveService {
     last_result: Record<string, number>
     message: string | null
   }
+}
+
+interface History {
+  entries: number
+  recs: number
+  runs: number
+  lastEntry: string | null
+  lastImport: string | null
+  lastImportEntries: number | null
 }
 
 interface OtherService {
@@ -43,6 +53,7 @@ interface OtherService {
   alternative?: string
   connected?: boolean
   settingKey?: string
+  history?: History | null
 }
 
 
@@ -82,6 +93,22 @@ const GROUPS: { title: string; types: MediaType[] }[] = [
   { title: 'Games', types: ['game'] },
 ]
 
+function ImportedLine({ history }: { history?: History | null }) {
+  if (!history?.entries) return null
+  const when = history.lastImport || history.lastEntry
+  return (
+    <span className="importedline">
+      <Icon name="check" size={12} />
+      <span>
+        <strong className="u-tnum">{history.entries.toLocaleString('en-GB')}</strong>
+        {' '}entr{history.entries === 1 ? 'y' : 'ies'} in your library
+        {history.recs ? <> · <span className="u-tnum">{history.recs}</span> to check out</> : null}
+        {when ? <> · last import {fmtDate(when.slice(0, 10))}</> : null}
+      </span>
+    </span>
+  )
+}
+
 const KIND_LABEL: Record<string, string> = {
   'oauth-device': 'Live sync · sign in',
   'oauth-code': 'Live sync · sign in',
@@ -107,6 +134,9 @@ export function ConnectionsPage() {
   })).filter((g) => g.live.length || g.files.length || g.meta.length)
 
   const connectedCount = (data?.live ?? []).filter((s) => s.state.status === 'connected').length
+  const importedServices = [...(data?.live ?? []), ...(data?.fileOnly ?? [])]
+    .filter((s) => (s.history?.entries ?? 0) > 0)
+  const importedEntries = importedServices.reduce((n, s) => n + (s.history?.entries ?? 0), 0)
 
   return (
     <div className="page">
@@ -114,10 +144,13 @@ export function ConnectionsPage() {
         <div>
           <h1 style={{ fontSize: 24 }}>Connections</h1>
           <p>
-            {connectedCount
-              ? `${connectedCount} service${connectedCount === 1 ? '' : 's'} connected.`
-              : 'Nothing connected yet.'}
-            {' '}Live services sync on demand; everything else imports from a file.
+            {[
+              connectedCount ? `${connectedCount} connected for live sync` : null,
+              importedServices.length
+                ? `${importedServices.length} ${importedServices.length === 1 ? 'service has' : 'services have'} brought in ${importedEntries.toLocaleString('en-GB')} entries`
+                : null,
+            ].filter(Boolean).join(' · ') || 'Nothing connected or imported yet.'}
+            {'. '}Live services sync on demand; everything else imports from a file.
           </p>
         </div>
         <Link className="btn" to="/import"><Icon name="import" size={15} /> Import a file</Link>
@@ -257,9 +290,10 @@ function LiveCard({ service, onChange }: { service: LiveService; onChange: () =>
   }
 
   const connected = s.status === 'connected'
+  const imported = (service.history?.entries ?? 0) > 0
 
   return (
-    <article className={`conncard${connected ? ' is-connected' : ''}`}>
+    <article className={`conncard${connected || imported ? ' is-connected' : ''}`}>
       <div className="conncard__head">
         <div className="u-col u-grow" style={{ gap: 4, minWidth: 0 }}>
           <div className="u-row u-wrap" style={{ gap: 8 }}>
@@ -272,7 +306,7 @@ function LiveCard({ service, onChange }: { service: LiveService; onChange: () =>
               : service.capabilities.join(' · ')}
           </span>
         </div>
-        <span className={`conndot${connected ? ' is-on' : s.status === 'error' ? ' is-bad' : ''}`} />
+        <span className={`conndot${connected || imported ? ' is-on' : s.status === 'error' ? ' is-bad' : ''}`} />
       </div>
 
       <p className="u-xs u-mut" style={{ margin: 0, lineHeight: 1.55 }}>{service.blurb}</p>
@@ -371,8 +405,9 @@ function LiveCard({ service, onChange }: { service: LiveService; onChange: () =>
 function OtherCard({ service }: { service: OtherService }) {
   const [open, setOpen] = useState(false)
   const isMetadata = service.kind.startsWith('metadata')
+  const imported = (service.history?.entries ?? 0) > 0
   return (
-    <article className={`conncard${isMetadata && service.connected ? ' is-connected' : ''}`}>
+    <article className={`conncard${(isMetadata && service.connected) || imported ? ' is-connected' : ''}`}>
       <div className="conncard__head">
         <div className="u-col u-grow" style={{ gap: 4, minWidth: 0 }}>
           <div className="u-row u-wrap" style={{ gap: 8 }}>
@@ -384,8 +419,9 @@ function OtherCard({ service }: { service: OtherService }) {
               {service.settingKey ? (service.connected ? 'Key saved' : 'Optional — add a key in Settings') : 'Always on'}
             </span>
           )}
+          {!isMetadata && imported && <ImportedLine history={service.history} />}
         </div>
-        {isMetadata && <span className={`conndot${service.connected ? ' is-on' : ''}`} />}
+        {(isMetadata || imported) && <span className={`conndot${service.connected || imported ? ' is-on' : ''}`} />}
       </div>
 
       <p className="u-xs u-mut" style={{ margin: 0, lineHeight: 1.55 }}>{linkify(service.blurb)}</p>
