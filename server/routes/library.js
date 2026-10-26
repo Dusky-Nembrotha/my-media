@@ -2,8 +2,9 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes } from '../providers/index.js'
+import { searchProviders, searchAllTypes, tmdb } from '../providers/index.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
+import { setting } from '../lib/settings.js'
 import { currentUserId } from '../lib/user.js'
 
 export const router = Router()
@@ -123,22 +124,56 @@ router.get('/works/:id', (req, res) => {
   const work = workWithStats(Number(req.params.id))
   if (!work) return res.status(404).json({ error: 'Not found' })
 
-  // "More like this" from your own library: shared creator or genre.
-  const names = work.creators.filter((c) => c.role !== 'Cast').map((c) => c.name.toLowerCase())
-  const genres = work.genres.map((g) => String(g).toLowerCase())
-  const pool = all(`${WORK_CARD_SQL} WHERE w.type = ? AND w.id != ? LIMIT 400`, work.type, work.id)
-  const related = pool
-    .map((row) => {
-      const w = hydrate(row)
+  /*
+   * "More like this", from your own library.
+   *
+   * Two things matter: who made it, and how *unusual* the overlap is. Sharing
+   * "Drama" with two hundred other films says nothing; sharing "Western" with
+   * ten says a lot. So genres are weighted by how rare they are, and cast is
+   * left out — two films sharing an actor are rarely alike.
+   */
+  const pool = all(`${WORK_CARD_SQL} WHERE w.type = ? AND w.id != ?`, work.type, work.id)
+  const hydrated = pool.map(hydrate)
+
+  const genreFreq = new Map()
+  for (const w of hydrated) {
+    for (const g of new Set(w.genres.map((x) => String(x).toLowerCase()))) {
+      genreFreq.set(g, (genreFreq.get(g) || 0) + 1)
+    }
+  }
+  const total = Math.max(1, hydrated.length)
+  // Classic inverse document frequency, capped so one oddity cannot run away.
+  const rarity = (g) => Math.min(4, Math.log(total / (1 + (genreFreq.get(g) || 0))))
+
+  const makers = new Set(
+    work.creators.filter((c) => c.role && c.role !== 'Cast').map((c) => String(c.name).toLowerCase()),
+  )
+  const wantGenres = new Set(work.genres.map((g) => String(g).toLowerCase()))
+  const wantKeywords = new Set((work.metadata?.keywords || []).map((k) => String(k).toLowerCase()))
+
+  const related = hydrated
+    .map((w) => {
       let score = 0
-      for (const c of w.creators) if (names.includes(String(c.name).toLowerCase())) score += 3
-      for (const g of w.genres) if (genres.includes(String(g).toLowerCase())) score += 1
-      return { row, score }
+      const why = []
+      for (const c of w.creators) {
+        if (!c.role || c.role === 'Cast') continue
+        if (makers.has(String(c.name).toLowerCase())) { score += 5; why.push(c.name) }
+      }
+      for (const g of new Set(w.genres.map((x) => String(x).toLowerCase()))) {
+        if (wantGenres.has(g)) score += rarity(g)
+      }
+      for (const k of (w.metadata?.keywords || [])) {
+        if (wantKeywords.has(String(k).toLowerCase())) score += 1.5
+      }
+      // A shared decade is a tiebreaker, never a reason.
+      if (w.year && work.year && Math.abs(w.year - work.year) <= 5) score += 0.3
+      return { w, score, why }
     })
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score || (b.row.rating ?? 0) - (a.row.rating ?? 0))
+    // One common genre in common is not a resemblance.
+    .filter((x) => x.score >= 2.5)
+    .sort((a, b) => b.score - a.score || (b.w.rating ?? 0) - (a.w.rating ?? 0))
     .slice(0, 8)
-    .map((x) => cardOf(x.row))
+    .map((x) => cardOf(pool.find((p) => p.id === x.w.id)))
 
   prioritise([work, ...related])
   res.json({ work, related })
@@ -158,6 +193,17 @@ router.patch('/works/:id', (req, res) => {
     ...keys.map((k) => patch[k]), id,
   )
   res.json(workWithStats(id))
+})
+
+/** Where to watch it, for film and TV. */
+router.get('/works/:id/watch', async (req, res) => {
+  const work = get('SELECT id, type, tmdb_id, title FROM works WHERE id = ?', Number(req.params.id))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+  if (work.type !== 'film' && work.type !== 'tv') return res.json({ available: false })
+  if (!work.tmdb_id) return res.json({ available: false, reason: 'no-tmdb-id' })
+  const region = String(req.query.region || setting('watch_region') || 'GB').toUpperCase()
+  const providers = await tmdb.watchProviders(work.type, work.tmdb_id, region)
+  res.json({ available: Boolean(providers), region, ...(providers || {}) })
 })
 
 /** "This is the wrong film" — re-match and replace the metadata. */
@@ -274,9 +320,15 @@ router.get('/search', async (req, res) => {
   const q = String(req.query.q || '').trim()
   if (!q) return res.json({ local: [], remote: [] })
   const type = req.query.type && req.query.type !== 'all' ? req.query.type : null
+  // Searching an author or director should find their work, not just titles.
+  const like = `%${q.toLowerCase()}%`
   const local = all(
-    `${WORK_CARD_SQL} WHERE lower(w.title) LIKE ? ${type ? 'AND w.type = ?' : ''} ORDER BY entry_count DESC, w.sort_title LIMIT 12`,
-    `%${q.toLowerCase()}%`, ...(type ? [type] : []),
+    `${WORK_CARD_SQL}
+      WHERE (lower(w.title) LIKE ? OR lower(w.creators) LIKE ?)
+        ${type ? 'AND w.type = ?' : ''}
+      ORDER BY (CASE WHEN lower(w.title) LIKE ? THEN 0 ELSE 1 END), entry_count DESC, w.sort_title
+      LIMIT 12`,
+    like, like, ...(type ? [type] : []), like,
   ).map(cardOf)
 
   let remote = []

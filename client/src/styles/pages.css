@@ -820,3 +820,33 @@ code {
   color: var(--ink-2);
 }
 .searchbtn--primary:hover { background: color-mix(in oklab, var(--accent) 18%, transparent); }
+
+/* The hero borrows its colour from the cover it sits behind. */
+.workhero.is-tinted .workhero__scrim {
+  background:
+    linear-gradient(to bottom, rgba(var(--cover-base), 0.30), var(--canvas) 88%),
+    linear-gradient(118deg, rgba(var(--cover-accent), 0.34) 0%, rgba(var(--cover-base), 0.14) 46%, transparent 76%),
+    linear-gradient(to right, rgba(10, 9, 12, 0.88) 0%, rgba(10, 9, 12, 0.45) 52%, rgba(10, 9, 12, 0.62));
+}
+:root[data-theme="light"] .workhero.is-tinted .workhero__scrim {
+  background:
+    linear-gradient(to bottom, rgba(var(--cover-base), 0.14), var(--canvas) 90%),
+    linear-gradient(118deg, rgba(var(--cover-accent), 0.16) 0%, transparent 70%),
+    linear-gradient(to right, rgba(247, 246, 243, 0.9) 0%, rgba(247, 246, 243, 0.6) 55%, rgba(247, 246, 243, 0.78));
+}
+.workhero.is-tinted .workhero__bg { filter: blur(40px) saturate(1.5) brightness(0.72); }
+
+.providers { display: flex; gap: 7px; flex-wrap: wrap; }
+.provider {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.provider img { width: 100%; height: 100%; object-fit: cover; }
+.provider__text { font-size: 9px; text-align: center; padding: 2px; color: var(--ink-3); line-height: 1.1; }

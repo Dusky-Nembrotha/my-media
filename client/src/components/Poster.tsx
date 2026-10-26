@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Icon } from './Icon'
+import { artworkUrl } from '../lib/img'
 import { Stars } from './Stars'
 import { SECTION_META, creatorLine, statusLabel } from '../lib/format'
 import type { MediaType } from '../lib/types'
@@ -17,7 +18,7 @@ export function PosterArt({ src, title, type, rating, liked, flag, aspect }: {
   return (
     <div className="poster__frame" style={{ ['--ar' as string]: aspect || meta.aspect, ['--hue' as string]: meta.hue }}>
       {src
-        ? <img src={src} alt="" loading="lazy" decoding="async" />
+        ? <img src={artworkUrl(src)} alt="" loading="lazy" decoding="async" />
         : <div className="poster__fallback" style={{ ['--hue' as string]: meta.hue }}>{title}</div>}
       <div className="poster__veil">
         <span className="poster__veil-title">{title}</span>

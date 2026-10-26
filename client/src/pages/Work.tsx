@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { Stars } from '../components/Stars'
@@ -6,6 +6,8 @@ import { PosterArt, PosterCard } from '../components/Poster'
 import { Row } from '../components/Row'
 import { Modal } from '../components/Modal'
 import { api } from '../lib/api'
+import { coverColours } from '../lib/coverColour'
+import { artworkUrl } from '../lib/img'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtDate, fmtRuntime, relDate, statusLabel } from '../lib/format'
 import type { Entry, Work, WorkCard } from '../lib/types'
@@ -17,6 +19,17 @@ export function WorkPage() {
   const { data, loading, reload, setData } = useFetch<{ work: Work; related: WorkCard[] }>(id ? `/works/${id}` : null, [id])
   const [editing, setEditing] = useState<Entry | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // The hero takes its colour from the artwork it is sitting behind.
+  const [tint, setTint] = useState<{ base: string; accent: string } | null>(null)
+  const poster = data?.work?.poster_url ?? null
+
+  useEffect(() => {
+    setTint(null)
+    if (!poster) return
+    let live = true
+    void coverColours(artworkUrl(poster) || poster).then((c) => { if (live && c) setTint(c) })
+    return () => { live = false }
+  }, [poster])
 
   if (loading) {
     return (
@@ -43,14 +56,6 @@ export function WorkPage() {
       setData({ work: updated, related })
       toast(rating == null ? 'Rating cleared' : `Rated ${rating}★`)
       void refresh()
-    } catch (err) { toast((err as Error).message, 'error') }
-  }
-
-  async function toggleLike() {
-    if (!latest) { openLog({ kind: 'work', work }); return }
-    try {
-      const updated = await api.patch<Work>(`/entries/${latest.id}`, { liked: !latest.liked })
-      setData({ work: updated, related })
     } catch (err) { toast((err as Error).message, 'error') }
   }
 
@@ -82,8 +87,11 @@ export function WorkPage() {
 
   return (
     <div className="page page--flush">
-      <div className="workhero">
-        <div className="workhero__bg" style={{ backgroundImage: work.backdrop_url || work.poster_url ? `url(${work.backdrop_url || work.poster_url})` : undefined }} />
+      <div
+        className={`workhero${tint ? ' is-tinted' : ''}`}
+        style={tint ? ({ ['--cover-base' as string]: tint.base, ['--cover-accent' as string]: tint.accent }) : undefined}
+      >
+        <div className="workhero__bg" style={{ backgroundImage: work.backdrop_url || work.poster_url ? `url(${artworkUrl(work.backdrop_url || work.poster_url)})` : undefined }} />
         <div className="workhero__scrim" />
         <div className="workhero__inner">
           <div className="workhero__poster">
@@ -130,14 +138,21 @@ export function WorkPage() {
                 {latest
                   ? <Stars value={latest.rating} size={30} onChange={(r) => rate(latest.id, r)} showValue />
                   : <span className="u-sm u-mut">Not logged yet</span>}
+                {latest && (
+                  <span className="u-row u-xs u-mut" style={{ gap: 7 }}>
+                    <span>
+                      {meta.verb} {latest.consumed_on ? fmtDate(latest.consumed_on) : 'at some point'}
+                      {work.entries.length > 1 ? ` · ${work.entries.length} times` : ''}
+                    </span>
+                    <button className="linkish" onClick={() => setEditing(latest)}>edit</button>
+                  </span>
+                )}
               </div>
               <div className="u-row u-wrap" style={{ gap: 8 }}>
                 <button className="btn btn--primary" onClick={() => openLog({ kind: 'work', work })}>
                   <Icon name="plus" size={15} /> {work.entries.length ? `Log again` : `Log as ${meta.verb.toLowerCase()}`}
                 </button>
-                <button className={`btn${latest?.liked ? ' btn--primary' : ''}`} onClick={toggleLike} title="Like">
-                  <Icon name="heart" size={15} /> {latest?.liked ? 'Liked' : 'Like'}
-                </button>
+
                 {links.map((l) => (
                   <a key={l.label} className="btn btn--ghost" href={l.href} target="_blank" rel="noreferrer">
                     {l.label} <Icon name="external" size={13} />
@@ -164,46 +179,6 @@ export function WorkPage() {
             </section>
           )}
 
-          <section>
-            <div className="section-head">
-              <div>
-                <h2>Your history</h2>
-                <p>{work.entries.length} entr{work.entries.length === 1 ? 'y' : 'ies'}</p>
-              </div>
-            </div>
-            {work.entries.length === 0 ? (
-              <div className="card u-sm u-mut">Nothing logged yet — the button above starts the diary for this title.</div>
-            ) : (
-              <div className="card" style={{ padding: 6 }}>
-                {work.entries.map((e) => (
-                  <div key={e.id} className="entryrow">
-                    <span className="entryrow__date u-tnum u-sm">
-                      {e.consumed_on ? fmtDate(e.consumed_on) : <span className="u-mut">no date</span>}
-                    </span>
-                    <span className="u-col u-grow" style={{ gap: 5, minWidth: 0 }}>
-                      <span className="u-row u-wrap" style={{ gap: 8 }}>
-                        {e.rating != null && <Stars value={e.rating} size={14} />}
-                        {e.is_repeat && <span className="pill"><Icon name="repeat" size={11} /> Repeat</span>}
-                        {e.liked && <span className="pill pill--accent"><Icon name="heart" size={11} /> Liked</span>}
-                        {e.progress && <span className="pill">{e.progress}</span>}
-                        {statusLabel(e.status, work.type) && <span className="pill pill--warn">{statusLabel(e.status, work.type)}</span>}
-                        {e.source !== 'manual' && <span className="pill">{e.source}</span>}
-                      </span>
-                      {e.review && <p className="u-sm" style={{ margin: 0, color: 'var(--ink-2)', lineHeight: 1.6 }}>{e.review}</p>}
-                      {e.tags.length > 0 && (
-                        <span className="chiprow">{e.tags.map((t) => <span key={t} className="chip chip--static">{t}</span>)}</span>
-                      )}
-                    </span>
-                    <span className="u-row" style={{ gap: 2, flex: '0 0 auto' }}>
-                      <button className="iconbtn" onClick={() => setEditing(e)} aria-label="Edit entry"><Icon name="pencil" size={15} /></button>
-                      <button className="iconbtn" onClick={() => removeEntry(e.id)} aria-label="Delete entry"><Icon name="trash" size={15} /></button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
           {related.length > 0 && (
             <Row title="More like this in your library" cardWidth={140}>
               {related.map((w) => <PosterCard key={w.id} work={w} aspect={SECTION_META[w.type].aspect} />)}
@@ -212,6 +187,7 @@ export function WorkPage() {
         </div>
 
         <aside className="workbody__side">
+          <WhereToWatch workId={work.id} type={work.type} />
           <div className="card">
             <div className="u-caps" style={{ marginBottom: 10 }}>Details</div>
             <dl className="deflist">
@@ -260,6 +236,7 @@ export function WorkPage() {
           type={work.type}
           onClose={() => setEditing(null)}
           onSaved={(updated) => { setData({ work: updated, related }); setEditing(null); void refresh() }}
+          onDelete={() => { void removeEntry(editing.id); setEditing(null) }}
         />
       )}
 
@@ -286,11 +263,12 @@ export function WorkPage() {
   )
 }
 
-function EntryEditor({ entry, type, onClose, onSaved }: {
+function EntryEditor({ entry, type, onClose, onSaved, onDelete }: {
   entry: Entry
   type: Work['type']
   onClose: () => void
   onSaved: (work: Work) => void
+  onDelete: () => void
 }) {
   const { toast } = useApp()
   const [rating, setRating] = useState(entry.rating)
@@ -322,6 +300,8 @@ function EntryEditor({ entry, type, onClose, onSaved }: {
       onClose={onClose}
       footer={
         <>
+          <button className="btn btn--ghost btn--danger" onClick={onDelete}>Delete this entry</button>
+          <span className="u-grow" />
           <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn--primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         </>
@@ -392,4 +372,66 @@ function buildLinks(work: Work) {
   if (work.metadata?.wikipedia) out.push({ label: 'Wikipedia', href: work.metadata.wikipedia })
   if (work.isbn && !out.length) out.push({ label: 'Open Library', href: `https://openlibrary.org/isbn/${work.isbn}` })
   return out.slice(0, 3)
+}
+
+
+/**
+ * Streaming availability. The data is JustWatch's, reached through TMDB, who
+ * license it — which is why JustWatch is credited and linked here.
+ */
+function WhereToWatch({ workId, type }: { workId: number; type: Work['type'] }) {
+  const enabled = type === 'film' || type === 'tv'
+  const { data, loading } = useFetch<any>(enabled ? `/works/${workId}/watch` : null, [workId])
+
+  if (!enabled || loading || !data?.available) return null
+  const groups = [
+    ['Streaming', data.stream],
+    ['Free', data.free],
+    ['Rent', data.rent],
+    ['Buy', data.buy],
+  ].filter(([, list]) => (list as any[])?.length) as [string, any[]][]
+
+  if (!groups.length) {
+    return (
+      <div className="card">
+        <div className="u-caps" style={{ marginBottom: 8 }}>Where to watch</div>
+        <p className="u-xs u-mut" style={{ margin: 0 }}>
+          Nothing streaming in {data.region} right now.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card">
+      <div className="u-spread" style={{ marginBottom: 10 }}>
+        <span className="u-caps">Where to watch</span>
+        <span className="u-xs u-mut">{data.region}</span>
+      </div>
+      <div className="u-col" style={{ gap: 12 }}>
+        {groups.map(([label, list]) => (
+          <div key={label} className="u-col" style={{ gap: 6 }}>
+            <span className="u-xs u-mut">{label}</span>
+            <div className="providers">
+              {list.slice(0, 6).map((p: any) => (
+                <span key={p.name} className="provider" title={p.name}>
+                  {p.logo
+                    ? <img src={p.logo} alt={p.name} loading="lazy" />
+                    : <span className="provider__text">{p.name}</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {data.link && (
+        <a className="btn btn--sm btn--ghost" style={{ marginTop: 12 }} href={data.link} target="_blank" rel="noreferrer">
+          Open on JustWatch <Icon name="external" size={12} />
+        </a>
+      )}
+      <p className="u-xs u-mut" style={{ margin: '10px 0 0' }}>
+        Availability from JustWatch, via TMDB.
+      </p>
+    </div>
+  )
 }

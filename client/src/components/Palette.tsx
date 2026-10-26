@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
+import { artworkUrl } from '../lib/img'
 import { api, qs } from '../lib/api'
 import { useApp } from '../lib/store'
 import { SECTION_META, TYPE_ORDER, creatorLine } from '../lib/format'
@@ -15,8 +16,11 @@ export function Palette() {
   const [q, setQ] = useState('')
   const [local, setLocal] = useState<WorkCard[]>([])
   const [remote, setRemote] = useState<ProviderHit[]>([])
+  const [searching, setSearching] = useState(false)
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Replies can arrive out of order; only the newest query may paint.
+  const seq = useRef(0)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -40,14 +44,26 @@ export function Palette() {
   useEffect(() => {
     if (!paletteOpen) return
     const term = q.trim()
-    if (term.length < 2) { setLocal([]); setRemote([]); return }
+    if (term.length < 2) { setLocal([]); setRemote([]); setSearching(false); return }
+
+    const mine = ++seq.current
     const t = setTimeout(async () => {
+      // Your own library comes straight from the database, so show it at once
+      // rather than waiting on the metadata services.
+      try {
+        const quick = await api.get<{ local: WorkCard[] }>(`/search${qs({ q: term, remote: 0 })}`)
+        if (seq.current === mine) setLocal(quick.local)
+      } catch { /* the remote pass may still succeed */ }
+
+      if (seq.current !== mine) return
+      setSearching(true)
       try {
         const res = await api.get<{ local: WorkCard[]; remote: ProviderHit[] }>(`/search${qs({ q: term })}`)
-        setLocal(res.local)
-        setRemote(res.remote.slice(0, 6))
-      } catch { /* search is best-effort */ }
-    }, 280)
+        if (seq.current === mine) { setLocal(res.local); setRemote(res.remote.slice(0, 6)) }
+      } catch { /* leave whatever the quick pass found */ } finally {
+        if (seq.current === mine) setSearching(false)
+      }
+    }, 180)
     return () => clearTimeout(t)
   }, [q, paletteOpen])
 
@@ -108,6 +124,7 @@ export function Palette() {
               if (e.key === 'Escape') close()
             }}
           />
+          {searching && <span className="spinner" />}
           <kbd>esc</kbd>
         </div>
         <div className="palette__list">
@@ -118,7 +135,7 @@ export function Palette() {
               return (
                 <button key={`w${row.w.id}`} className={`palette__item${isActive ? ' is-active' : ''}`} onMouseEnter={() => setActive(i)} onClick={() => activate(i)}>
                   {row.w.poster_url
-                    ? <img className={`palette__thumb${SECTION_META[row.w.type].aspect === '1 / 1' ? ' palette__thumb--sq' : ''}`} src={row.w.poster_url} alt="" />
+                    ? <img className={`palette__thumb${SECTION_META[row.w.type].aspect === '1 / 1' ? ' palette__thumb--sq' : ''}`} src={artworkUrl(row.w.poster_url)} alt="" />
                     : <span className="palette__thumb" />}
                   <span className="u-grow u-col" style={{ gap: 1 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 560 }}>{row.w.title}</span>
@@ -149,7 +166,7 @@ export function Palette() {
                 {i === first && <div className="palette__group u-caps">Not in your library yet</div>}
                 <button className={`palette__item${isActive ? ' is-active' : ''}`} onMouseEnter={() => setActive(i)} onClick={() => activate(i)}>
                   {row.h.poster_url
-                    ? <img className={`palette__thumb${SECTION_META[row.h.type].aspect === '1 / 1' ? ' palette__thumb--sq' : ''}`} src={row.h.poster_url} alt="" />
+                    ? <img className={`palette__thumb${SECTION_META[row.h.type].aspect === '1 / 1' ? ' palette__thumb--sq' : ''}`} src={artworkUrl(row.h.poster_url)} alt="" />
                     : <span className="palette__thumb" />}
                   <span className="u-grow u-col" style={{ gap: 1 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 560 }}>{row.h.title}</span>
@@ -164,8 +181,11 @@ export function Palette() {
           })}
           {term.length >= 2 && rows.length === 0 && (
             <div style={{ padding: '26px 14px', textAlign: 'center' }} className="u-sm u-mut">
-              Nothing found for “{q}”.
+              {searching ? 'Searching…' : `Nothing found for “${q}”.`}
             </div>
+          )}
+          {searching && rows.length > 0 && (
+            <div className="palette__group u-xs u-mut">Still looking for more…</div>
           )}
         </div>
       </div>

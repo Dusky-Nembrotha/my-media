@@ -8,6 +8,7 @@ import { useApp, useFetch } from '../lib/store'
 import { qs } from '../lib/api'
 import { SECTION_META, creatorLine, fmtDate, fmtRuntime, relDate } from '../lib/format'
 import { api } from '../lib/api'
+import { artworkUrl } from '../lib/img'
 import type { MediaType, Rec, WorkCard } from '../lib/types'
 import { PosterArt } from '../components/Poster'
 
@@ -165,7 +166,7 @@ export function SectionPage({ type }: { type: MediaType }) {
           {works.map((w) => (
             <Link key={w.id} to={`/work/${w.id}`} className="listrow">
               {w.poster_url
-                ? <img className="listrow__thumb" src={w.poster_url} alt="" loading="lazy" style={{ aspectRatio: meta.aspect }} />
+                ? <img className="listrow__thumb" src={artworkUrl(w.poster_url)} alt="" loading="lazy" style={{ aspectRatio: meta.aspect }} />
                 : <span className="listrow__thumb" style={{ aspectRatio: meta.aspect }} />}
               <span className="u-col u-grow" style={{ gap: 3, minWidth: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 560 }} className="u-trunc">{w.title}</span>

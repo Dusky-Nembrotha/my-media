@@ -10,6 +10,7 @@ import { router as connections } from './routes/connections.js'
 import { router as auth } from './routes/auth.js'
 import { requireAuth, applyEnvPassword } from './lib/auth.js'
 import { queueAll, queueAllRecArtwork } from './enrich.js'
+import { ARTWORK_DIR } from './lib/artwork.js'
 
 const app = express()
 const PORT = Number(process.env.PORT || 4123)
@@ -26,6 +27,10 @@ app.set('trust proxy', true)
 
 // A deployment given SHELVED_PASSWORD is never open, even on first boot.
 if (applyEnvPassword()) console.log('  password set from SHELVED_PASSWORD')
+
+// Cached cover art, served locally: the upstream CDNs are slow, and
+// same-origin images let the client sample their colours.
+app.use(`${BASE}/artwork`, express.static(ARTWORK_DIR, { maxAge: '30d', immutable: true }))
 
 app.use(`${BASE}/api`, auth)
 app.use(`${BASE}/api`, requireAuth)

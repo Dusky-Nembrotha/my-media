@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
+import { artworkUrl } from '../lib/img'
 import { Stars } from '../components/Stars'
 import { Empty } from '../components/Modal'
 import { useFetch } from '../lib/store'
@@ -50,7 +51,7 @@ export function DiaryPage() {
                       {a.consumed_on ? Number(a.consumed_on.slice(8, 10)) : '–'}
                     </span>
                     {a.poster_url
-                      ? <img className="diaryrow__thumb" src={a.poster_url} alt="" loading="lazy" style={{ aspectRatio: SECTION_META[a.type].aspect }} />
+                      ? <img className="diaryrow__thumb" src={artworkUrl(a.poster_url)} alt="" loading="lazy" style={{ aspectRatio: SECTION_META[a.type].aspect }} />
                       : <span className="diaryrow__thumb" style={{ aspectRatio: SECTION_META[a.type].aspect }} />}
                     <span className="u-col u-grow" style={{ gap: 4, minWidth: 0 }}>
                       <span className="u-row u-wrap" style={{ gap: 8 }}>

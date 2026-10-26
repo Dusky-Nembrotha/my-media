@@ -143,3 +143,37 @@ export async function trending(type, limit = 20) {
     return []
   }
 }
+
+/**
+ * Where you can actually watch something.
+ *
+ * TMDB licenses this from JustWatch, which is why the response carries a
+ * JustWatch deep link — and why their terms require JustWatch to be credited
+ * wherever it is shown.
+ */
+export async function watchProviders(type, id, region = 'GB') {
+  if (!hasKey() || !id) return null
+  const path = type === 'tv' ? `/tv/${id}/watch/providers` : `/movie/${id}/watch/providers`
+  try {
+    const data = await fetchJson(url(path), { ttlSeconds: 60 * 60 * 24 })
+    const here = data?.results?.[region]
+    if (!here) return { region, link: null, stream: [], rent: [], buy: [], free: [] }
+
+    const shape = (list) => (list || []).map((p) => ({
+      name: p.provider_name,
+      logo: p.logo_path ? `${IMG}/w92${p.logo_path}` : null,
+      priority: p.display_priority ?? 99,
+    })).sort((a, b) => a.priority - b.priority)
+
+    return {
+      region,
+      link: here.link || null,          // the JustWatch page for this title
+      stream: shape(here.flatrate),
+      free: shape([...(here.free || []), ...(here.ads || [])]),
+      rent: shape(here.rent),
+      buy: shape(here.buy),
+    }
+  } catch {
+    return null
+  }
+}

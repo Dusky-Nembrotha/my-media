@@ -9,6 +9,7 @@ const DEFAULTS = {
   default_section: 'home',
   enrich_on_import: '1',
   owner_name: '',
+  watch_region: 'GB',
 }
 
 export function getSettings() {

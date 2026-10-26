@@ -16,7 +16,14 @@ const KIND_WEIGHT = {
 }
 
 const RECENCY_HALF_LIFE_YEARS = 5
-const SHRINK = 2          // pulls thin evidence towards neutral
+/*
+ * Shrinkage, and how much evidence an attribute needs before it is allowed to
+ * drive anything. With these set too low the engine chased noise: three films
+ * tagged "Male friendship" outranked two hundred tagged Drama.
+ */
+const SHRINK = 6
+const CONFIDENCE_K = 8    // confidence = n / (n + K)
+const MIN_SUPPORT = 4     // below this an attribute can explain, but not drive
 const IMPLICIT_WEIGHT = 0.45
 
 function attrsOf(work) {
@@ -31,7 +38,9 @@ function attrsOf(work) {
     // Cast members are weak signal compared with the authoring roles.
     out.push({
       key: `creator:${c.role || 'Creator'}|${String(c.name).toLowerCase()}`,
-      weight: c.role === 'Cast' ? 0.4 : 1,
+      // Sharing an actor rarely means two films are alike; sharing a director
+      // usually does. Cast stays in so it can explain a pick, not choose one.
+      weight: c.role === 'Cast' ? 0.12 : 1,
       display: String(c.name),
     })
   }
@@ -120,7 +129,7 @@ export function buildProfile() {
 
   for (const slot of attrs.values()) {
     slot.score = slot.sum / (slot.weightSum + SHRINK)
-    slot.confidence = slot.n / (slot.n + SHRINK)
+    slot.confidence = slot.n / (slot.n + CONFIDENCE_K)
     slot.support.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
     slot.support = slot.support.slice(0, 5)
     slot.types = [...slot.types]
@@ -128,7 +137,7 @@ export function buildProfile() {
 
   const list = [...attrs.values()]
   const pickTop = (prefix, minN) => list
-    .filter((a) => a.key.startsWith(prefix) && a.n >= minN && a.score > 0)
+    .filter((a) => a.key.startsWith(prefix) && a.n >= Math.max(minN, MIN_SUPPORT) && a.score > 0)
     .sort((a, b) => b.score * b.confidence - a.score * a.confidence)
 
   return {
@@ -181,7 +190,10 @@ async function candidatesForType(type, profile, { breadth = 1 } = {}) {
   const out = []
   const roles = ROLE_FOR_TYPE[type] || ['Creator']
   const creators = profile.topCreators
-    .filter((c) => c.types.includes(type) && roles.includes(parseCreatorKey(c.key).role))
+    .filter((c) => {
+      const { role } = parseCreatorKey(c.key)
+      return c.types.includes(type) && roles.includes(role) && role !== 'Cast'
+    })
     .slice(0, Math.round(6 * breadth))
   const genres = profile.topGenres.filter((g) => g.types.includes(type)).slice(0, Math.round(4 * breadth))
   const seedWorks = [
@@ -385,7 +397,10 @@ export function rank(candidates, profile, { limit = 12 } = {}) {
       const kind = key.split(':')[0]
       // A genre learnt from your TV ratings should nudge, not drive, a book pick.
       const crossMedia = slot.types.includes(c.type) ? 1 : 0.4
-      const contribution = slot.score * slot.confidence * (KIND_WEIGHT[kind] ?? 0.4) * weight * crossMedia
+      // Thin evidence can colour a recommendation but must not choose it.
+      const support = slot.n >= MIN_SUPPORT ? 1 : 0.25
+      const contribution = slot.score * slot.confidence * (KIND_WEIGHT[kind] ?? 0.4)
+        * weight * crossMedia * support
       score += contribution
       contributions.push({ key, slot, contribution })
     }

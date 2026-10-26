@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
+import { artworkUrl } from '../lib/img'
 import { Row } from '../components/Row'
 import { PosterCard, PosterSkeleton } from '../components/Poster'
 import { Empty } from '../components/Modal'
@@ -94,7 +95,7 @@ export function HomePage() {
               ? activity.data.activity.map((a) => (
                 <Link key={a.entry_id} to={`/work/${a.work_id}`} className="actrow">
                   {a.poster_url
-                    ? <img className="actrow__thumb" src={a.poster_url} alt="" loading="lazy" />
+                    ? <img className="actrow__thumb" src={artworkUrl(a.poster_url)} alt="" loading="lazy" />
                     : <span className="actrow__thumb" />}
                   <span className="u-grow u-col" style={{ gap: 2, minWidth: 0 }}>
                     <span className="u-trunc" style={{ fontSize: 13.5, fontWeight: 560 }}>{a.title}</span>
@@ -125,7 +126,7 @@ export function HomePage() {
               ? inbox.data.recs.slice(0, 6).map((r) => (
                 <div key={r.id} className="actrow">
                   {r.poster_url
-                    ? <img className="actrow__thumb" src={r.poster_url} alt="" loading="lazy" />
+                    ? <img className="actrow__thumb" src={artworkUrl(r.poster_url)} alt="" loading="lazy" />
                     : <span className="actrow__thumb" />}
                   <span className="u-grow u-col" style={{ gap: 2, minWidth: 0 }}>
                     <span className="u-trunc" style={{ fontSize: 13.5, fontWeight: 560 }}>{r.title}</span>

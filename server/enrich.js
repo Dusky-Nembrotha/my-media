@@ -2,6 +2,7 @@ import { all, get, run } from './lib/db.js'
 import { enrich } from './providers/index.js'
 import { hydrate } from './lib/works.js'
 import { canonicalGenres } from './lib/util.js'
+import { cacheArtwork } from './lib/artwork.js'
 
 /**
  * Background metadata enrichment. Imports stage bare titles; this fills in
@@ -134,6 +135,24 @@ async function enrichWork(id) {
     const genres = canonicalGenres([...work.genres, ...(found.genres || [])])
     if (genres.length !== work.genres.length) patch.genres = JSON.stringify(genres.slice(0, 14))
     patch.metadata = JSON.stringify({ ...work.metadata, ...(found.metadata || {}), provider: found.provider, enrich_attempts: attempts })
+  }
+
+  // Keep a local copy of the artwork, and record how good it is.
+  const remote = patch.poster_url || work.poster_url
+  if (remote && !String(remote).startsWith('/artwork/')) {
+    const art = await cacheArtwork(remote)
+    if (art?.path) {
+      patch.poster_url = art.path
+      const meta = patch.metadata ? JSON.parse(patch.metadata) : { ...work.metadata }
+      meta.artwork = {
+        source: remote,
+        width: art.width ?? null,
+        height: art.height ?? null,
+        quality: art.quality ?? null,
+      }
+      patch.metadata = JSON.stringify(meta)
+      if (!patch.backdrop_url && !work.backdrop_url) patch.backdrop_url = art.path
+    }
   }
 
   const keys = Object.keys(patch)

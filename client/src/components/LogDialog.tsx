@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Modal } from './Modal'
 import { Stars } from './Stars'
 import { Icon } from './Icon'
+import { artworkUrl } from '../lib/img'
 import { PosterArt } from './Poster'
 import { api, qs } from '../lib/api'
 import { useApp } from '../lib/store'
@@ -38,6 +39,7 @@ export function LogDialog() {
   const [byHand, setByHand] = useState(false)
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const seq = useRef(0)
 
   // log fields
   const [rating, setRating] = useState<number | null>(null)
@@ -87,18 +89,26 @@ export function LogDialog() {
     if (!logTarget || logTarget.kind !== 'blank' || chosen) return
     const q = query.trim()
     if (q.length < 2) { setHits([]); setSearching(false); return }
+    const mine = ++seq.current
     setSearching(true)
     const t = setTimeout(async () => {
+      const scope = { q, type: typeFilter === 'all' ? null : typeFilter }
+      const shape = (res: { local: any[]; remote?: ProviderHit[] }) => [
+        ...res.local.map((l) => ({ ...l, provider: 'library', inLibrary: true, overview: null, genres: l.genres || [] })),
+        ...(res.remote ?? []),
+      ].slice(0, 12) as Hit[]
       try {
-        const res = await api.get<{ remote: ProviderHit[]; local: any[] }>(
-          `/search${qs({ q, type: typeFilter === 'all' ? null : typeFilter })}`,
-        )
-        setHits([
-          ...res.local.map((l) => ({ ...l, provider: 'library', inLibrary: true, overview: null, genres: l.genres || [] })),
-          ...res.remote,
-        ].slice(0, 12) as Hit[])
-      } catch { setHits([]) } finally { setSearching(false) }
-    }, 300)
+        const quick = await api.get<{ local: any[] }>(`/search${qs({ ...scope, remote: 0 })}`)
+        if (seq.current === mine) setHits(shape(quick))
+      } catch { /* keep going */ }
+      if (seq.current !== mine) return
+      try {
+        const res = await api.get<{ remote: ProviderHit[]; local: any[] }>(`/search${qs(scope)}`)
+        if (seq.current === mine) setHits(shape(res))
+      } catch { /* leave the quick results in place */ } finally {
+        if (seq.current === mine) setSearching(false)
+      }
+    }, 200)
     return () => clearTimeout(t)
   }, [query, typeFilter, logTarget, chosen])
 
@@ -270,7 +280,7 @@ export function LogDialog() {
                   <button key={i} className="hit" onClick={() => setChosen(hit)}>
                     <span className="hit__art">
                       <PosterArt
-                        src={hit.poster_url}
+                        src={artworkUrl(hit.poster_url)}
                         title={hit.title}
                         type={hit.type}
                         aspect={SECTION_META[hit.type].aspect}

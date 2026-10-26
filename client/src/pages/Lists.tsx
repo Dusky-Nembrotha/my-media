@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icon'
+import { artworkUrl } from '../lib/img'
 import { Modal, Empty } from '../components/Modal'
 import { PosterCard } from '../components/Poster'
 import { api } from '../lib/api'
@@ -49,7 +50,7 @@ export function ListsPage() {
         <div className="grid grid--wide">
           {lists.map((l) => (
             <Link key={l.id} to={`/lists/${l.slug}`} className="listcard">
-              {l.cover ? <img src={l.cover} alt="" loading="lazy" /> : <span className="listcard__blank" />}
+              {l.cover ? <img src={artworkUrl(l.cover)} alt="" loading="lazy" /> : <span className="listcard__blank" />}
               <span className="listcard__body">
                 <strong>{l.name}</strong>
                 <span className="u-xs u-mut">{l.items} title{l.items === 1 ? '' : 's'}</span>
