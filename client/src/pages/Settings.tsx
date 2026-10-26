@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PoorArtworkList } from '../components/ArtworkPicker'
 import { Icon } from '../components/Icon'
 import { api } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
@@ -213,6 +214,11 @@ export function SettingsPage() {
               <button className="btn" disabled={saving} onClick={() => save({ owner_name: owner.trim() })}>Save</button>
             </div>
           </div>
+        </section>
+
+        <section className="card card--pad-lg">
+          <h2 style={{ marginBottom: 4 }}>Covers that need attention</h2>
+          <PoorArtworkList />
         </section>
 
         <section className="card card--pad-lg">

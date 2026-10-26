@@ -177,3 +177,26 @@ export async function watchProviders(type, id, region = 'GB') {
     return null
   }
 }
+
+/** Every poster TMDB holds for a title, best first. */
+export async function images(type, id) {
+  if (!hasKey() || !id) return []
+  const path = type === 'tv' ? `/tv/${id}/images` : `/movie/${id}/images`
+  try {
+    const data = await fetchJson(url(path, { include_image_language: 'en,null' }), { ttlSeconds: 60 * 60 * 24 * 7 })
+    return (data?.posters || [])
+      .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0))
+      .slice(0, 12)
+      .map((p) => ({
+        url: poster(p.file_path, 'w500'),
+        full: poster(p.file_path, 'original'),
+        width: p.width,
+        height: p.height,
+        language: p.iso_639_1,
+        source: 'TMDB',
+      }))
+      .filter((p) => p.url)
+  } catch {
+    return []
+  }
+}

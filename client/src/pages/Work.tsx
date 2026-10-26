@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal'
 import { api } from '../lib/api'
 import { coverColours } from '../lib/coverColour'
 import { artworkUrl } from '../lib/img'
+import { ArtworkPicker } from '../components/ArtworkPicker'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtDate, fmtRuntime, relDate, statusLabel } from '../lib/format'
 import type { Entry, Work, WorkCard } from '../lib/types'
@@ -21,6 +22,7 @@ export function WorkPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   // The hero takes its colour from the artwork it is sitting behind.
   const [tint, setTint] = useState<{ base: string; accent: string } | null>(null)
+  const [pickingArt, setPickingArt] = useState(false)
   const poster = data?.work?.poster_url ?? null
 
   useEffect(() => {
@@ -96,6 +98,9 @@ export function WorkPage() {
         <div className="workhero__inner">
           <div className="workhero__poster">
             <PosterArt src={work.poster_url} title={work.title} type={work.type} aspect={meta.aspect} />
+            <button className="btn btn--sm changeart" onClick={() => setPickingArt(true)}>
+              <Icon name="pencil" size={12} /> Change cover
+            </button>
           </div>
           <div className="workhero__body">
             <div className="u-row u-wrap" style={{ gap: 8 }}>
@@ -237,6 +242,14 @@ export function WorkPage() {
           onClose={() => setEditing(null)}
           onSaved={(updated) => { setData({ work: updated, related }); setEditing(null); void refresh() }}
           onDelete={() => { void removeEntry(editing.id); setEditing(null) }}
+        />
+      )}
+
+      {pickingArt && (
+        <ArtworkPicker
+          workId={work.id}
+          onClose={() => setPickingArt(false)}
+          onChosen={() => reload()}
         />
       )}
 

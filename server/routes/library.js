@@ -2,7 +2,9 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes, tmdb } from '../providers/index.js'
+import { searchProviders, searchAllTypes, tmdb, ol, itunes, mb, wiki } from '../providers/index.js'
+import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
+import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
 import { setting } from '../lib/settings.js'
 import { currentUserId } from '../lib/user.js'
@@ -193,6 +195,128 @@ router.patch('/works/:id', (req, res) => {
     ...keys.map((k) => patch[k]), id,
   )
   res.json(workWithStats(id))
+})
+
+/** Alternative covers for a title, so a poor one can be replaced. */
+router.get('/works/:id/artwork', async (req, res) => {
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+
+  const author = work.creators.find((c) => ['Author', 'Artist', 'Director'].includes(c.role))?.name
+  const jobs = []
+  if ((work.type === 'film' || work.type === 'tv') && work.tmdb_id) jobs.push(tmdb.images(work.type, work.tmdb_id))
+  if (work.type === 'book' || work.type === 'audiobook') jobs.push(ol.editionCovers(work.title, author))
+  if (['album', 'track', 'audiobook', 'podcast', 'book'].includes(work.type)) {
+    jobs.push(itunes.search(work.type, [work.title, author].filter(Boolean).join(' '), 6)
+      .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Apple', label: h.title }))))
+  }
+  if (work.type === 'album' && work.mbid) {
+    jobs.push(Promise.resolve([{ url: mb.coverUrl(work.mbid, 1200), source: 'Cover Art Archive' }]))
+  }
+  jobs.push(wiki.search(work.type, work.title, 4)
+    .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Wikipedia', label: h.title }))))
+
+  const settled = await Promise.allSettled(jobs)
+  const seen = new Set()
+  const candidates = []
+  for (const r of settled) {
+    if (r.status !== 'fulfilled') continue
+    for (const c of r.value || []) {
+      if (!c?.url || seen.has(c.url)) continue
+      seen.add(c.url)
+      candidates.push(c)
+    }
+  }
+
+  // Measuring means downloading, so cap it and reuse anything already held.
+  const measured = []
+  for (const c of candidates.slice(0, 16)) {
+    const already = cachedPathFor(c.url)
+    if (already || c.width) {
+      measured.push({ ...c, cached: already, quality: c.width ? qualityOf({ ok: true, width: c.width }) : null })
+    } else {
+      measured.push(c)
+    }
+  }
+
+  res.json({
+    current: work.poster_url,
+    currentMeta: work.metadata?.artwork ?? null,
+    candidates: measured,
+  })
+})
+
+/** Choose one of them. */
+router.post('/works/:id/artwork', async (req, res) => {
+  const id = Number(req.params.id)
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', id))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+  const url = String(req.body?.url || '').trim()
+  if (!url) return res.status(400).json({ error: 'A url is required' })
+
+  const art = await cacheArtwork(url, { timeout: 40000 })
+  if (!art?.path) return res.status(502).json({ error: 'That image could not be fetched' })
+
+  const metadata = { ...work.metadata, artwork: { source: url, width: art.width ?? null, height: art.height ?? null, quality: art.quality ?? null, chosen: true } }
+  run(
+    "UPDATE works SET poster_url = ?, backdrop_url = ?, metadata = ?, updated_at = datetime('now') WHERE id = ?",
+    art.path, art.path, JSON.stringify(metadata), id,
+  )
+  res.json({ ok: true, poster_url: art.path, width: art.width, height: art.height, quality: art.quality })
+})
+
+/** Everything whose cover is too small to look right. */
+router.get('/artwork/poor', (req, res) => {
+  const rows = all(`
+    SELECT id, type, title, year, poster_url,
+           json_extract(metadata, '$.artwork.width') w,
+           json_extract(metadata, '$.artwork.height') h,
+           json_extract(metadata, '$.artwork.quality') q
+      FROM works
+     WHERE q IN ('poor', 'low') OR (poster_url IS NULL AND EXISTS (SELECT 1 FROM entries e WHERE e.work_id = works.id))
+     ORDER BY q, title`)
+  res.json({ works: rows })
+})
+
+/**
+ * Replace every soft cover with the largest alternative on offer. Runs in the
+ * background because each one means a fetch.
+ */
+router.post('/artwork/upgrade', async (req, res) => {
+  const targets = all(`
+    SELECT id FROM works
+     WHERE json_extract(metadata, '$.artwork.quality') IN ('poor', 'low')
+       AND json_extract(metadata, '$.artwork.chosen') IS NULL`)
+  res.json({ ok: true, queued: targets.length })
+
+  for (const { id } of targets) {
+    const work = hydrate(get('SELECT * FROM works WHERE id = ?', id))
+    if (!work) continue
+    const author = work.creators.find((c) => ['Author', 'Artist', 'Director'].includes(c.role))?.name
+    let options = []
+    try {
+      if ((work.type === 'film' || work.type === 'tv') && work.tmdb_id) options = await tmdb.images(work.type, work.tmdb_id)
+      else if (work.type === 'book' || work.type === 'audiobook') options = await ol.editionCovers(work.title, author, 6)
+      else options = (await itunes.search(work.type, [work.title, author].filter(Boolean).join(' '), 4))
+        .filter((h) => h.poster_url).map((h) => ({ url: h.poster_url }))
+    } catch { continue }
+
+    let best = null
+    for (const option of options.slice(0, 6)) {
+      const art = await cacheArtwork(option.url, { timeout: 40000 })
+      if (!art?.width) continue
+      if (!best || art.width > best.width) best = { ...art, source: option.url }
+    }
+    const currentWidth = work.metadata?.artwork?.width ?? 0
+    if (!best || best.width <= currentWidth) continue
+
+    run(
+      "UPDATE works SET poster_url = ?, backdrop_url = ?, metadata = ?, updated_at = datetime('now') WHERE id = ?",
+      best.path, best.path,
+      JSON.stringify({ ...work.metadata, artwork: { source: best.source, width: best.width, height: best.height, quality: best.quality } }),
+      id,
+    )
+  }
 })
 
 /** Where to watch it, for film and TV. */

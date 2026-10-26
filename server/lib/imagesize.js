@@ -67,13 +67,16 @@ export async function measureImage(url, { timeout = 8000 } = {}) {
   }
 }
 
-/** Below this an image looks soft on a poster card. */
-export const MIN_POSTER_WIDTH = 260
+/*
+ * The hero poster renders about 206px wide, which wants ~420px on a
+ * high-density screen before it starts to look upscaled.
+ */
+export const MIN_POSTER_WIDTH = 420
 
 export function qualityOf(measured) {
   if (!measured?.ok || !measured.width) return 'unknown'
-  if (measured.width < 150) return 'poor'
+  if (measured.width < 200) return 'poor'
   if (measured.width < MIN_POSTER_WIDTH) return 'low'
-  if (measured.width < 500) return 'fine'
+  if (measured.width < 700) return 'fine'
   return 'good'
 }

@@ -124,3 +124,28 @@ export async function workDetail(olid) {
     return null
   }
 }
+
+/** Covers from every edition Open Library knows of, so a poor scan can be swapped. */
+export async function editionCovers(title, author, limit = 12) {
+  if (!title) return []
+  const q = author ? `${title} author:${author}` : title
+  try {
+    const data = await fetchJson(
+      `${BASE}/search.json?q=${encodeURIComponent(q)}&limit=6&fields=key,title,author_name,cover_i,edition_key,first_publish_year`,
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    const out = []
+    for (const doc of data?.docs || []) {
+      if (doc.cover_i) {
+        out.push({ url: coverUrl(doc.cover_i, 'L'), source: 'Open Library', label: doc.title })
+      }
+      for (const ed of (doc.edition_key || []).slice(0, 4)) {
+        out.push({ url: `https://covers.openlibrary.org/b/olid/${ed}-L.jpg`, source: 'Open Library', label: `${doc.title} (edition)` })
+      }
+      if (out.length >= limit) break
+    }
+    return out.slice(0, limit)
+  } catch {
+    return []
+  }
+}

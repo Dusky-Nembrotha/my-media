@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, existsSync, writeFileSync, statSync, readdirSync, unlinkSync } from 'node:fs'
+import { mkdirSync, existsSync, writeFileSync, statSync, readdirSync, unlinkSync, readFileSync } from 'node:fs'
 import { join, extname } from 'node:path'
 import { DATA_DIR } from './db.js'
 import { dimensionsFrom, qualityOf, MIN_POSTER_WIDTH } from './imagesize.js'
@@ -49,7 +49,18 @@ export async function cacheArtwork(url, { timeout = 30000 } = {}) {
     const full = join(DATA_DIR, already.replace('/artwork/', 'artwork/'))
     try {
       const { size } = statSync(full)
-      return { path: already, bytes: size, cached: true }
+      // Measure from disk: the caller needs the dimensions whether or not we
+      // had to go and fetch the bytes.
+      const head = readFileSync(full).subarray(0, 65536)
+      const dims = dimensionsFrom(head) || {}
+      return {
+        path: already,
+        bytes: size,
+        cached: true,
+        width: dims.width ?? null,
+        height: dims.height ?? null,
+        quality: dims.width ? qualityOf({ ok: true, ...dims }) : null,
+      }
     } catch { /* fall through and refetch */ }
   }
 
