@@ -78,4 +78,9 @@ check "profile built" "$(curl -s $B/profile | j 'o.genres.length > 3')" "true"
 
 echo "== tidy up"
 curl -s -X DELETE $B/works/$WID > /dev/null
+# The auto-closed recommendation outlives its work, so clear it too.
+curl -s -X DELETE $B/recs/$R2 > /dev/null
+for id in $(curl -s "$B/recs?status=all" | j 'o.recs.filter(r=>r.title==="Smoke Test Film").map(r=>r.id).join(" ")'); do
+  curl -s -X DELETE $B/recs/$id > /dev/null
+done
 check "work removed" "$(curl -s $B/works/$WID | j 'o.error ? "gone" : "still here"')" "gone"
