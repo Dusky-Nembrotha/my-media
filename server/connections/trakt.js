@@ -21,7 +21,7 @@ export const fields = [
 
 export const instructions = [
   'Sign in at trakt.tv, then open Settings → "Your API Apps" (trakt.tv/oauth/applications).',
-  'Press "New Application". Name it anything — "My Media" will do.',
+  'Press "New Application". Name it anything — "Shelved" will do.',
   'For Redirect URI paste exactly: urn:ietf:wg:oauth:2.0:oob',
   'Leave the other boxes empty and save.',
   'Copy the Client ID and Client Secret from the app page into the boxes above, and save.',

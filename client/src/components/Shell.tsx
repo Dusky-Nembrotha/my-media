@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Icon } from './Icon'
+import { Logo } from './Logo'
 import { useApp } from '../lib/store'
 import { SECTION_META, TYPE_ORDER } from '../lib/format'
 
@@ -31,9 +32,9 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="shell" data-collapsed={collapsed}>
       <nav className="rail" aria-label="Sections">
         <Link to="/" className="rail__brand">
-          <span className="rail__mark">M</span>
+          <span className="rail__mark"><Logo size={22} /></span>
           <span className="u-col u-grow" style={{ minWidth: 0 }}>
-            <span className="rail__name">My Media</span>
+            <span className="rail__name">Shelved</span>
             <span className="rail__sub">{counts.entries.toLocaleString('en-GB')} things logged</span>
           </span>
         </Link>
@@ -217,5 +218,5 @@ function pageTitle(path: string, sections: { type: string; label: string; works:
   if (map[path]) return map[path]
   if (path.startsWith('/work/')) return { title: '', crumb: null }
   if (path.startsWith('/lists/')) return { title: 'List', crumb: null }
-  return { title: 'My Media', crumb: null }
+  return { title: 'Shelved', crumb: null }
 }

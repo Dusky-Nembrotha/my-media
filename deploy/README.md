@@ -1,19 +1,19 @@
-# Running My Media as a service
+# Running Shelved as a service
 
 The app otherwise has to be started by hand and stops when the terminal closes.
 This unit starts it at boot and restarts it if it falls over.
 
 ```bash
-sudo cp deploy/my-media.service /etc/systemd/system/
+sudo cp deploy/shelved.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now my-media
+sudo systemctl enable --now shelved
 ```
 
 Check it:
 
 ```bash
-systemctl status my-media
-journalctl -u my-media -f          # live logs
+systemctl status shelved
+journalctl -u shelved -f          # live logs
 ```
 
 The unit waits for the external drive to be mounted (`RequiresMountsFor`), since
@@ -26,17 +26,17 @@ something else. One setting drives the asset URLs, the client router and the
 server mount point together, so the URL shape is the same everywhere.
 
 ```bash
-MYMEDIA_BASE_PATH=/media npm run build
-MYMEDIA_BASE_PATH=/media npm start        # http://localhost:4123/media
+SHELVED_BASE_PATH=/media npm run build
+SHELVED_BASE_PATH=/media npm start        # http://localhost:4123/media
 ```
 
 For the service, set it in the unit and rebuild to match — the build and the
 server must agree, or the page will load with no styling and no data:
 
 ```bash
-sudo systemctl edit --full my-media       # add: Environment=MYMEDIA_BASE_PATH=/media
-MYMEDIA_BASE_PATH=/media npm run build
-sudo systemctl restart my-media
+sudo systemctl edit --full shelved       # add: Environment=SHELVED_BASE_PATH=/media
+SHELVED_BASE_PATH=/media npm run build
+sudo systemctl restart shelved
 ```
 
 ### Publishing on a shared Tailscale Funnel port

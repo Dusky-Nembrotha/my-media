@@ -3,7 +3,7 @@ import { parseYear, splitPeople } from '../lib/util.js'
 
 // Keyless, no sign-up, covers films, TV, music, audiobooks, podcasts and ebooks.
 const BASE = 'https://itunes.apple.com'
-const COUNTRY = process.env.MYMEDIA_STORE || 'GB'
+const COUNTRY = process.env.SHELVED_STORE || 'GB'
 
 const ENTITY = {
   film: 'movie',

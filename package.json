@@ -1,5 +1,5 @@
 {
-  "name": "my-media",
+  "name": "shelved",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "start": "node server/index.js",
     "serve": "npm run build && node server/index.js",
     "samples": "node scripts/make-samples.js",
-    "postinstall": "node -e \"console.log('\\nMy Media installed. Run: npm run build && npm start\\n')\""
+    "postinstall": "node -e \"console.log('\\nShelved installed. Run: npm run build && npm start\\n')\""
   },
   "dependencies": {
     "busboy": "^1.6.0",

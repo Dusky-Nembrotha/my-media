@@ -20,7 +20,7 @@ trap cleanup EXIT
 
 if [ "$OWN_SERVER" = "1" ]; then
   TMPDATA=$(mktemp -d)
-  MYMEDIA_DATA="$TMPDATA" PORT=$PORT node server/index.js > "$TMPDATA/server.log" 2>&1 &
+  SHELVED_DATA="$TMPDATA" PORT=$PORT node server/index.js > "$TMPDATA/server.log" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 40); do
     curl -s -o /dev/null "$B/health" && break

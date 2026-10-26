@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My Media — a self-hosted log of everything you watch, read and listen to</title>
+<title>Shelved — a self-hosted log of everything you watch, read and listen to</title>
 <meta name="description" content="Log films, TV, books, audiobooks, music, podcasts and games. Imports from Letterboxd, Goodreads, Audible, Spotify, Trakt and more, with recommendations built from your own ratings.">
-<meta property="og:title" content="My Media">
+<meta property="og:title" content="Shelved">
 <meta property="og:description" content="A self-hosted log of everything you watch, read and listen to.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a090c'/%3E%3Cpath d='M9 8h4l3 7 3-7h4v16h-4v-8l-3 7-3-7v8H9z' fill='%23f472b6'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a090c'/%3E%3Crect x='5' y='9' width='4.2' height='15' rx='1.2' fill='%23afadb8'/%3E%3Crect x='10.6' y='12.5' width='4.2' height='11.5' rx='1.2' fill='%237b7986'/%3E%3Crect x='16.2' y='6.5' width='4.2' height='17.5' rx='1.2' fill='%23f472b6'/%3E%3Crect x='22.2' y='10' width='4.2' height='14' rx='1.2' fill='%23afadb8' transform='rotate(13 24.3 24)'/%3E%3Crect x='2.5' y='24.5' width='27' height='3.2' rx='1.6' fill='%23f3f2f5'/%3E%3C/svg%3E">
 <style>
   :root {
     --canvas: #0a090c; --card: #131216; --ink: #f3f2f5; --ink-2: #afadb8; --ink-3: #7b7986;
@@ -24,7 +24,7 @@
   header { padding: 80px 0 48px; }
   .mark {
     width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center;
-    font: 700 28px/1 var(--font); color: var(--pink);
+    display: grid; place-items: center;
     background: rgba(244,114,182,.13); border: 1px solid rgba(244,114,182,.4); margin-bottom: 22px;
   }
   h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.05; letter-spacing: -.03em; margin: 0 0 14px; }
@@ -62,7 +62,13 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="mark">M</div>
+    <div class="mark"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="Shelved" role="img">
+      <rect x="5" y="9" width="4.2" height="15" rx="1.2" fill="#afadb8"/>
+      <rect x="10.6" y="12.5" width="4.2" height="11.5" rx="1.2" fill="#7b7986"/>
+      <rect x="16.2" y="6.5" width="4.2" height="17.5" rx="1.2" fill="#f472b6"/>
+      <rect x="22.2" y="10" width="4.2" height="14" rx="1.2" fill="#afadb8" transform="rotate(13 24.3 24)"/>
+      <rect x="2.5" y="24.5" width="27" height="3.2" rx="1.6" fill="#f3f2f5"/>
+    </svg></div>
     <h1>Everything you watch, read and&nbsp;listen&nbsp;to — in one place.</h1>
     <p class="lede">
       Films, TV, books, audiobooks, music, podcasts and games. Import years of history
@@ -70,15 +76,15 @@
       ratings rather than a popularity chart.
     </p>
     <div class="btns">
-      <a class="btn btn--primary" href="https://github.com/Dusky-Nembrotha/my-media">View the code</a>
-      <a class="btn" href="https://github.com/Dusky-Nembrotha/my-media/blob/main/DEPLOY.md">Run your own</a>
+      <a class="btn btn--primary" href="https://github.com/Dusky-Nembrotha/shelved">View the code</a>
+      <a class="btn" href="https://github.com/Dusky-Nembrotha/shelved/blob/main/DEPLOY.md">Run your own</a>
     </div>
 
     <p class="note">
-      <strong>This page is documentation, not the app.</strong> My Media is self-hosted:
+      <strong>This page is documentation, not the app.</strong> Shelved is self-hosted:
       it runs on your own machine or your own hosting, with your library in a SQLite file
       you control. GitHub Pages can only serve static files, so the app itself cannot run
-      here — <a href="https://github.com/Dusky-Nembrotha/my-media/blob/main/DEPLOY.md">DEPLOY.md</a>
+      here — <a href="https://github.com/Dusky-Nembrotha/shelved/blob/main/DEPLOY.md">DEPLOY.md</a>
       takes about five minutes.
     </p>
   </header>
@@ -136,18 +142,18 @@
   </table>
 
   <h2>Running it</h2>
-  <pre><code>git clone https://github.com/Dusky-Nembrotha/my-media.git
-cd my-media
+  <pre><code>git clone https://github.com/Dusky-Nembrotha/shelved.git
+cd shelved
 npm install --no-bin-links
 npm run build
 npm start                 # http://localhost:4123</code></pre>
   <p style="color:var(--ink-3);font-size:14.5px">
     Needs Node 22.5 or newer. For a public URL with a password on it, see
-    <a href="https://github.com/Dusky-Nembrotha/my-media/blob/main/DEPLOY.md">DEPLOY.md</a>.
+    <a href="https://github.com/Dusky-Nembrotha/shelved/blob/main/DEPLOY.md">DEPLOY.md</a>.
   </p>
 
   <footer>
-    Source on <a href="https://github.com/Dusky-Nembrotha/my-media">GitHub</a>.
+    Source on <a href="https://github.com/Dusky-Nembrotha/shelved">GitHub</a>.
     Metadata from TMDB, Open Library, MusicBrainz, TVmaze, Apple and Wikidata.
   </footer>
 </div>

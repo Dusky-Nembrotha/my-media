@@ -1,4 +1,4 @@
--- My Media :: schema
+-- Shelved :: schema
 -- One row per *work* (a film, a show, a book, an album...), many rows per
 -- *entry* (each time you consumed it). Everything else hangs off those two.
 

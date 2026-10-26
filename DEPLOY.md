@@ -1,10 +1,10 @@
-# Putting My Media on a public URL
+# Putting Shelved on a public URL
 
 The app is a Node server with a SQLite database, so it needs somewhere that runs
 Node and gives it a real disk. These steps use [Fly.io](https://fly.io), whose free
 allowance comfortably covers a single-user app.
 
-End result: `https://my-media.fly.dev` (or whatever name you pick), locked behind
+End result: `https://shelved.fly.dev` (or whatever name you pick), locked behind
 your password, with your library on a persistent volume.
 
 ---
@@ -24,17 +24,17 @@ your password, with your library on a persistent volume.
 From the project directory:
 
 ```bash
-fly launch --no-deploy --copy-config --name my-media --region lhr
+fly launch --no-deploy --copy-config --name shelved --region lhr
 ```
 
 `--copy-config` uses the `fly.toml` already in the repo. Say **no** if it offers to
 set up Postgres or Redis — neither is needed. Pick a different `--name` if
-`my-media` is taken; the URL follows the name.
+`shelved` is taken; the URL follows the name.
 
 ## 2. Create the volume
 
 ```bash
-fly volumes create mymedia_data --size 1 --region lhr --yes
+fly volumes create shelved_data --size 1 --region lhr --yes
 ```
 
 1 GB is far more than this needs — the sample library is under 20 MB including
@@ -46,7 +46,7 @@ cached metadata. It must be in the same region as the app.
 ## 3. Set your password
 
 ```bash
-fly secrets set MYMEDIA_PASSWORD='something long you will remember'
+fly secrets set SHELVED_PASSWORD='something long you will remember'
 ```
 
 This matters: an app with no password refuses to let anyone set one over the public
@@ -65,7 +65,7 @@ Then `fly open`, and sign in with the password above.
 
 ## Moving your existing library up
 
-Your current library lives in `data/mymedia.db` on the Pi. To carry it over:
+Your current library lives in `data/shelved.db` on the Pi. To carry it over:
 
 ```bash
 # Stop the app so nothing is writing to the database mid-copy
@@ -73,7 +73,7 @@ fly machine list                      # note the machine id
 fly machine stop <machine-id>
 
 fly ssh sftp shell
-> put data/mymedia.db /data/mymedia.db
+> put data/shelved.db /data/shelved.db
 > quit
 
 fly machine start <machine-id>
@@ -83,13 +83,13 @@ Starting from scratch instead is fine too — open the deployed app, go to Impor
 either upload your exports again or press "Load a sample library".
 
 The password is stored *in* the database, so a copied-up database brings its own
-password with it. `MYMEDIA_PASSWORD` is reapplied at every boot, so whatever is in
+password with it. `SHELVED_PASSWORD` is reapplied at every boot, so whatever is in
 that secret wins.
 
 ## Backing it up
 
 ```bash
-fly ssh sftp get /data/mymedia.db ./mymedia-backup.db
+fly ssh sftp get /data/shelved.db ./shelved-backup.db
 ```
 
 Worth doing occasionally — a Fly volume is a single disk, not a replicated store.
@@ -114,13 +114,13 @@ Once `fly open` works, point the repo at it:
 
 ```bash
 # the "About" link on the GitHub repo page
-gh repo edit --homepage https://my-media.fly.dev
+gh repo edit --homepage https://shelved.fly.dev
 ```
 
 and swap the placeholder at the top of `README.md` for:
 
 ```markdown
-### ▶ [Open the app](https://my-media.fly.dev)
+### ▶ [Open the app](https://shelved.fly.dev)
 ```
 
 ---
@@ -131,7 +131,7 @@ and swap the placeholder at the top of `README.md` for:
 In your Spotify dashboard add:
 
 ```
-https://my-media.fly.dev/api/connections/spotify/callback
+https://shelved.fly.dev/api/connections/spotify/callback
 ```
 
 and paste the same address into the Redirect URI box on the Connections page. Trakt
@@ -151,5 +151,5 @@ fly ssh console
 
 ## Keeping the Pi copy too
 
-They are independent: the Pi keeps its own `data/mymedia.db`. Run both if you like,
+They are independent: the Pi keeps its own `data/shelved.db`. Run both if you like,
 but nothing syncs between them — decide which one is the real library.

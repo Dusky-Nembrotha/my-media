@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
+import { Logo } from '../components/Logo'
 import { api } from '../lib/api'
 
 interface Status {
@@ -38,14 +39,14 @@ export function LoginGate({ status, onIn }: { status: Status; onIn: () => void }
     return (
       <div className="loginwrap">
         <div className="logincard">
-          <span className="rail__mark" style={{ width: 44, height: 44, fontSize: 24 }}>M</span>
+          <span className="rail__mark" style={{ width: 48, height: 48 }}><Logo size={28} /></span>
           <h1>Not set up yet</h1>
           <p className="u-sm u-mut">
-            This copy of My Media has no password, and for safety the first one cannot be chosen
+            This copy of Shelved has no password, and for safety the first one cannot be chosen
             over the public internet — otherwise whoever found the address first would own it.
           </p>
           <p className="u-sm u-mut">
-            Set the <code>MYMEDIA_PASSWORD</code> secret on the deployment and restart, or open the
+            Set the <code>SHELVED_PASSWORD</code> secret on the deployment and restart, or open the
             app from the machine it runs on.
           </p>
         </div>
@@ -56,8 +57,8 @@ export function LoginGate({ status, onIn }: { status: Status; onIn: () => void }
   return (
     <div className="loginwrap">
       <form className="logincard" onSubmit={submit}>
-        <span className="rail__mark" style={{ width: 44, height: 44, fontSize: 24 }}>M</span>
-        <h1>{setup ? 'Choose a password' : 'My Media'}</h1>
+        <span className="rail__mark" style={{ width: 48, height: 48 }}><Logo size={28} /></span>
+        <h1>{setup ? 'Choose a password' : 'Shelved'}</h1>
         <p className="u-sm u-mut" style={{ margin: 0 }}>
           {setup
             ? 'This is the only thing standing between your library and anyone who finds the address. Make it a good one.'

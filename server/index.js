@@ -13,8 +13,8 @@ import { queueAll, queueAllRecArtwork } from './enrich.js'
 
 const app = express()
 const PORT = Number(process.env.PORT || 4123)
-// Must match the MYMEDIA_BASE_PATH the client was built with.
-const BASE = (process.env.MYMEDIA_BASE_PATH || '').replace(/\/$/, '')
+// Must match the SHELVED_BASE_PATH the client was built with.
+const BASE = (process.env.SHELVED_BASE_PATH || process.env.MYMEDIA_BASE_PATH || '').replace(/\/$/, '')
 const root = join(import.meta.dirname, '..')
 const dist = join(root, 'dist')
 
@@ -24,8 +24,8 @@ app.disable('x-powered-by')
 // IPs and the https flag are read from the forwarding headers.
 app.set('trust proxy', true)
 
-// A deployment given MYMEDIA_PASSWORD is never open, even on first boot.
-if (applyEnvPassword()) console.log('  password set from MYMEDIA_PASSWORD')
+// A deployment given SHELVED_PASSWORD is never open, even on first boot.
+if (applyEnvPassword()) console.log('  password set from SHELVED_PASSWORD')
 
 app.use(`${BASE}/api`, auth)
 app.use(`${BASE}/api`, requireAuth)
@@ -51,13 +51,13 @@ if (existsSync(dist)) {
 } else {
   app.get('/', (req, res) => res.status(503).type('html').send(
     '<pre style="font:14px ui-monospace;padding:2rem;color:#eee;background:#111">'
-    + 'My Media: the client is not built yet.\n\nRun  npm run build  then reload,\n'
+    + 'Shelved: the client is not built yet.\n\nRun  npm run build  then reload,\n'
     + 'or  npm run dev  for the hot-reloading dev server on :5173.</pre>',
   ))
 }
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  My Media — http://localhost:${PORT}${BASE}`)
+  console.log(`\n  Shelved — http://localhost:${PORT}${BASE}`)
   console.log(`  On your network: http://<this-machine>:${PORT}${BASE}\n`)
 
   // The queue lives in memory, so pick up anything a restart interrupted.

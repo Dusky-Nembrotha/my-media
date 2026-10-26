@@ -120,11 +120,11 @@ router.get('/export', (req, res) => {
       is_repeat: r.is_repeat ? 'yes' : '',
     }))
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename="my-media-${new Date().toISOString().slice(0, 10)}.csv"`)
+    res.setHeader('Content-Disposition', `attachment; filename="shelved-${new Date().toISOString().slice(0, 10)}.csv"`)
     return res.send(toCsv(headers, flat))
   }
 
-  res.setHeader('Content-Disposition', `attachment; filename="my-media-${new Date().toISOString().slice(0, 10)}.json"`)
+  res.setHeader('Content-Disposition', `attachment; filename="shelved-${new Date().toISOString().slice(0, 10)}.json"`)
   res.json({
     exported_at: new Date().toISOString(),
     entries: rows.map((r) => ({ ...r, creators: json(r.creators, []), genres: json(r.genres, []), tags: json(r.tags, []) })),

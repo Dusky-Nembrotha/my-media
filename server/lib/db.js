@@ -1,16 +1,25 @@
 import { DatabaseSync } from 'node:sqlite'
-import { readFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..', '..')
-const dataDir = process.env.MYMEDIA_DATA || join(root, 'data')
+const dataDir = process.env.SHELVED_DATA || process.env.MYMEDIA_DATA || join(root, 'data')
 
 mkdirSync(dataDir, { recursive: true })
 
 export const DATA_DIR = dataDir
-export const db = new DatabaseSync(join(dataDir, 'mymedia.db'))
+/*
+ * New installs get shelved.db; an existing mymedia.db is used where it is,
+ * so renaming the app never puts anyone's library at risk.
+ */
+const legacy = join(dataDir, 'mymedia.db')
+const current = join(dataDir, 'shelved.db')
+const dbPath = existsSync(current) || !existsSync(legacy) ? current : legacy
+
+export const DB_PATH = dbPath
+export const db = new DatabaseSync(dbPath)
 
 db.exec(readFileSync(join(here, 'schema.sql'), 'utf8'))
 

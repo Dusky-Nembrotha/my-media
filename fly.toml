@@ -1,12 +1,12 @@
 # Fly.io deployment. See DEPLOY.md for the one-time setup.
-app = "my-media"
+app = "shelved"
 primary_region = "lhr"
 
 [build]
 
 [env]
   PORT = "4123"
-  MYMEDIA_DATA = "/data"
+  SHELVED_DATA = "/data"
 
 [http_service]
   internal_port = 4123
@@ -24,7 +24,7 @@ primary_region = "lhr"
 
 # SQLite needs a real disk. One machine only — a volume attaches to one at a time.
 [[mounts]]
-  source = "mymedia_data"
+  source = "shelved_data"
   destination = "/data"
 
 [[vm]]

@@ -15,7 +15,7 @@ const SESSION_COOKIE = 'mm_session'
  * reverse proxy, or a Tailscale Funnel port hosting several services — a
  * cookie at Path=/ would be sent to all the neighbours as well.
  */
-const COOKIE_PATH = (process.env.MYMEDIA_BASE_PATH || '').replace(/\/$/, '') || '/'
+const COOKIE_PATH = (process.env.SHELVED_BASE_PATH || process.env.MYMEDIA_BASE_PATH || '').replace(/\/$/, '') || '/'
 const SESSION_DAYS = 60
 const MAX_ATTEMPTS = 8
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000
@@ -73,7 +73,7 @@ export function verifyPassword(password) {
 
 /** An environment password (Fly secret) wins, so a fresh deploy is never open. */
 export function applyEnvPassword() {
-  const fromEnv = process.env.MYMEDIA_PASSWORD
+  const fromEnv = process.env.SHELVED_PASSWORD || process.env.MYMEDIA_PASSWORD
   if (!fromEnv) return false
   const salt = setting('auth_password_salt')
   if (salt) {
@@ -174,11 +174,11 @@ export function isPrivateAddress(ip) {
 /**
  * Setting the first password over the open internet would be a land grab, so
  * it is only allowed from a private network — or not at all once a deployment
- * has been given MYMEDIA_PASSWORD.
+ * has been given SHELVED_PASSWORD.
  */
 export function canRunSetup(req) {
   if (isConfigured()) return false
-  if (process.env.MYMEDIA_ALLOW_SETUP === '1') return true
+  if (process.env.SHELVED_ALLOW_SETUP === '1' || process.env.MYMEDIA_ALLOW_SETUP === '1') return true
   return isPrivateAddress(req.ip || req.socket?.remoteAddress)
 }
 

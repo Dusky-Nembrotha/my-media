@@ -274,7 +274,7 @@ export function SettingsPage() {
         </section>
 
         <p className="u-xs u-mut" style={{ textAlign: 'center' }}>
-          My Media v0.1 · self-hosted · data in <code>data/mymedia.db</code>
+          Shelved v0.1 · self-hosted · data in <code>data/shelved.db</code>
         </p>
       </div>
     </div>

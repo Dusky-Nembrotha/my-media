@@ -20,7 +20,7 @@ export const fields = [
 
 export const instructions = [
   'Go to last.fm/api/account/create (sign in first).',
-  'Application name: "My Media". Leave the callback URL empty and submit.',
+  'Application name: "Shelved". Leave the callback URL empty and submit.',
   'Copy the "API key" it shows you into the box above, along with your username.',
   'Save, then press Connect — your scrobbles are fetched and grouped into albums.',
   'Your Last.fm privacy settings must allow others to see your listening (the default).',

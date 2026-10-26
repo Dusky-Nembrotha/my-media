@@ -66,8 +66,8 @@ if (!confirm) {
   process.exit(0)
 }
 
-const backup = join(DATA_DIR, `mymedia-before-sample-removal-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`)
-copyFileSync(join(DATA_DIR, 'mymedia.db'), backup)
+const backup = join(DATA_DIR, `shelved-before-sample-removal-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`)
+copyFileSync(join(DATA_DIR, 'shelved.db'), backup)
 console.log(`\nBackup: ${backup}`)
 
 db.exec('BEGIN')

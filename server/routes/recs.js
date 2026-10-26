@@ -131,7 +131,7 @@ router.post('/recommendations/save', (req, res) => {
     `INSERT INTO recs (user_id, type, title, year, creators, poster_url, recommender, note, priority, status, origin, engine_reason, engine_score, added_at)
      VALUES (?,?,?,?,?,?,?,?,?,'open','engine',?,?,?)`,
     currentUserId(req), p.type || null, p.title, p.year ?? null, JSON.stringify(p.creators || []), p.poster_url || null,
-    'My Media taste engine', (p.reasons || []).join(' · ') || null, req.body.priority ?? 1,
+    'Shelved taste engine', (p.reasons || []).join(' · ') || null, req.body.priority ?? 1,
     (p.reasons || []).join(' · ') || null, p.score ?? null, today(),
   )
   res.json(recOf(get('SELECT * FROM recs WHERE id = ?', Number(stmt.lastInsertRowid))))

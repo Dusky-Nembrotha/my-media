@@ -1,6 +1,6 @@
 import { get, run } from './db.js'
 
-const UA = 'MyMedia/0.1 (self-hosted personal media log)'
+const UA = 'Shelved/0.1 (self-hosted personal media log)'
 const queues = new Map()
 
 /** Per-host politeness: serialise requests and space them out. */

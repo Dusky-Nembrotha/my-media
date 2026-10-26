@@ -25,7 +25,7 @@ export const fields = [
 
 export const instructions = [
   'Open developer.spotify.com/dashboard and press "Create app".',
-  'Name it "My Media". App description can be anything.',
+  'Name it "Shelved". App description can be anything.',
   'Redirect URI: paste exactly http://127.0.0.1:4123/api/connections/spotify/callback',
   'Tick "Web API", agree to the terms and save.',
   'Copy the Client ID, then "View client secret" and copy that too. Paste both above and save.',

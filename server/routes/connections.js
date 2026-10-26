@@ -178,7 +178,7 @@ router.get('/connections/:id/callback', async (req, res) => {
     let account = null
     try { account = await connector.account({ config: conn.config, tokens: result.tokens }) } catch { /* optional */ }
     saveConnection(connector.id, { status: 'connected', tokens: result.tokens, pending: {}, account, message: null })
-    res.send(page(`${connector.label} connected`, `<p>Signed in as <strong>${account || 'your account'}</strong>.</p><p>You can close this tab and go back to My Media.</p>`))
+    res.send(page(`${connector.label} connected`, `<p>Signed in as <strong>${account || 'your account'}</strong>.</p><p>You can close this tab and go back to Shelved.</p>`))
   } catch (err) {
     saveConnection(connector.id, { status: 'error', message: err.message })
     res.status(400).send(page('Could not finish', `<p>${err.message}</p>`))

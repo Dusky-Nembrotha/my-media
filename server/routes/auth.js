@@ -25,7 +25,7 @@ router.post('/auth/setup', (req, res) => {
   if (!canRunSetup(req)) {
     return res.status(403).json({
       error: 'For safety the first password can only be set from your own network. '
-        + 'On a hosted deployment, set the MYMEDIA_PASSWORD secret instead.',
+        + 'On a hosted deployment, set the SHELVED_PASSWORD secret instead.',
     })
   }
   try {

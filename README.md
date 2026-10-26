@@ -1,4 +1,4 @@
-# My Media
+# Shelved
 
 ### ▶ Open the app
 
@@ -7,7 +7,7 @@
 > [Start here](#running-it) — it is three commands.
 
 <!-- Once deployed, replace the block above with:
-### ▶ [Open the app](https://my-media.fly.dev)
+### ▶ [Open the app](https://shelved.fly.dev)
 -->
 
 **[Deploy guide](DEPLOY.md)** · **[Data model](docs/DATA-MODEL.md)** ·
@@ -52,7 +52,7 @@ On your own network the app is open, as a local tool should be. The moment it is
 reachable from outside, a password is required:
 
 - Open it from your own network and you will be asked to choose one, **or**
-- set `MYMEDIA_PASSWORD` before first boot (how a hosted deployment should do it).
+- set `SHELVED_PASSWORD` before first boot (how a hosted deployment should do it).
 
 A deployment with no password set refuses to let anyone choose one over the public
 internet — otherwise whoever found the address first would own it. Sessions are
@@ -186,7 +186,7 @@ client/src/
   pages/              Home · Section · Work · Diary · Recommended · Inbox · Lists · Stats · Import · Connections · Settings
   components/         Shell · Poster · Row · Modal · LogDialog · Palette · Charts · Stars · Icon
   styles/             tokens · base · app · pages
-data/mymedia.db       everything you have logged
+data/shelved.db       everything you have logged
 samples/              demo exports, also used by "Load a sample library"
 scripts/              sample generator, importer tests, smoke test
 ```
