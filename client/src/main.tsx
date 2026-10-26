@@ -15,7 +15,6 @@ import { WorkPage } from './pages/Work'
 import { DiaryPage } from './pages/Diary'
 import { RecommendedPage } from './pages/Recommended'
 import { InboxPage } from './pages/Inbox'
-import { ListsPage, ListDetailPage } from './pages/Lists'
 import { StatsPage } from './pages/Stats'
 import { ImportPage } from './pages/Import'
 import { SettingsPage } from './pages/Settings'
@@ -64,8 +63,6 @@ function Root() {
             <Route path="/diary" element={<DiaryPage />} />
             <Route path="/recommended" element={<RecommendedPage />} />
             <Route path="/inbox" element={<InboxPage />} />
-            <Route path="/lists" element={<ListsPage />} />
-            <Route path="/lists/:slug" element={<ListDetailPage />} />
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />

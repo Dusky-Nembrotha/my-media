@@ -6,8 +6,10 @@ import { Stars } from '../components/Stars'
 import { Empty, Modal } from '../components/Modal'
 import { useApp, useFetch } from '../lib/store'
 import { qs } from '../lib/api'
-import { SECTION_META, creatorLine, fmtDate, fmtRuntime } from '../lib/format'
-import type { MediaType, WorkCard } from '../lib/types'
+import { SECTION_META, creatorLine, fmtDate, fmtRuntime, relDate } from '../lib/format'
+import { api } from '../lib/api'
+import type { MediaType, Rec, WorkCard } from '../lib/types'
+import { PosterArt } from '../components/Poster'
 
 const SORTS = [
   ['recent', 'Last logged'],
@@ -38,6 +40,7 @@ const EMPTY: Filters = { genre: null, decade: null, minRating: null, status: nul
 
 export function SectionPage({ type }: { type: MediaType }) {
   const meta = SECTION_META[type]
+  const [tab, setTab] = useState<'done' | 'planned'>('done')
   const [sort, setSort] = useState<string>('recent')
   const [filters, setFilters] = useState<Filters>(EMPTY)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -70,8 +73,18 @@ export function SectionPage({ type }: { type: MediaType }) {
   const clearOne = (key: keyof Filters) => setFilters((f) => ({ ...f, [key]: key === 'unrated' ? false : null }))
   const clearAll = () => { setFilters(EMPTY); setQ('') }
 
+  if (tab === 'planned') {
+    return (
+      <div className="page">
+        <SectionTabs type={type} tab={tab} setTab={setTab} />
+        <PlannedList type={type} />
+      </div>
+    )
+  }
+
   return (
     <div className="page">
+      <SectionTabs type={type} tab={tab} setTab={setTab} />
       <div className="toolbar">
         <label className="toolbar__search">
           <Icon name="search" size={15} className="u-mut" />
@@ -260,5 +273,110 @@ export function SectionPage({ type }: { type: MediaType }) {
         </Modal>
       )}
     </div>
+  )
+}
+
+
+/** Switches a library between what you have finished and what you have not. */
+function SectionTabs({ type, tab, setTab }: {
+  type: MediaType
+  tab: 'done' | 'planned'
+  setTab: (t: 'done' | 'planned') => void
+}) {
+  const meta = SECTION_META[type]
+  const { data } = useFetch<{ recs: Rec[] }>(`/recs?status=open&type=${type}`, [type])
+  const waiting = data?.recs?.length ?? 0
+
+  return (
+    <div className="sectiontabs">
+      <button className={tab === 'done' ? 'is-on' : ''} onClick={() => setTab('done')}>
+        {meta.done}
+      </button>
+      <button className={tab === 'planned' ? 'is-on' : ''} onClick={() => setTab('planned')}>
+        {meta.planned}
+        {waiting > 0 && <span className="sectiontabs__count u-tnum">{waiting}</span>}
+      </button>
+    </div>
+  )
+}
+
+/** The things you mean to get to, for this one kind of media. */
+function PlannedList({ type }: { type: MediaType }) {
+  const meta = SECTION_META[type]
+  const { toast, refresh, openLog } = useApp()
+  const { data, loading, reload } = useFetch<{ recs: Rec[] }>(`/recs?status=open&type=${type}`, [type])
+
+  async function act(rec: Rec, what: 'log' | 'dismiss' | 'priority') {
+    try {
+      if (what === 'log') {
+        await api.post('/recommendations/log', {
+          pick: { type: rec.type || type, title: rec.title, year: rec.year, creators: rec.creators, poster_url: rec.poster_url },
+          rec_id: rec.id,
+        })
+        toast(`Logged ${rec.title}`)
+      } else if (what === 'dismiss') {
+        await api.patch(`/recs/${rec.id}`, { status: 'dismissed' })
+      } else {
+        await api.patch(`/recs/${rec.id}`, { priority: rec.priority === 2 ? 1 : 2 })
+      }
+      reload()
+      void refresh()
+    } catch (err) { toast((err as Error).message, 'error') }
+  }
+
+  if (loading && !data) {
+    return <div className="grid">{Array.from({ length: 8 }, (_, i) => <PosterSkeleton key={i} aspect={meta.aspect} />)}</div>
+  }
+
+  const recs = data?.recs ?? []
+  if (!recs.length) {
+    return (
+      <Empty
+        icon="inbox"
+        title={`Nothing on your ${meta.planned.toLowerCase()} list`}
+        action={<button className="btn btn--primary" onClick={() => openLog({ kind: 'blank', type, mode: 'want' })}>
+          <Icon name="plus" size={15} /> Add something
+        </button>}
+      >
+        Search for anything and choose “Want to”, or import a watchlist — they land here.
+      </Empty>
+    )
+  }
+
+  return (
+    <>
+      <div className="u-spread" style={{ marginBottom: 14 }}>
+        <span className="u-sm u-mut">{recs.length} waiting</span>
+        <button className="btn btn--sm" onClick={() => openLog({ kind: 'blank', type, mode: 'want' })}>
+          <Icon name="plus" size={14} /> Add
+        </button>
+      </div>
+      <div className="grid" style={{ ['--card-w' as string]: meta.aspect === '1 / 1' ? '164px' : '150px' }}>
+        {recs.map((rec) => (
+          <div key={rec.id} className="plannedcard">
+            <PosterArt src={rec.poster_url} title={rec.title} type={rec.type || type} aspect={meta.aspect} />
+            <div className="poster__meta">
+              <div className="poster__title">{rec.title}</div>
+              <div className="poster__sub u-trunc">
+                {[rec.year, rec.recommender].filter(Boolean).join(' · ')}
+              </div>
+              {rec.note && <div className="u-xs u-mut u-clamp-2" style={{ marginTop: 3 }}>{rec.note}</div>}
+              <div className="plannedcard__actions">
+                <button className="btn btn--sm btn--primary" onClick={() => act(rec, 'log')} title={`Mark as ${meta.done.toLowerCase()}`}>
+                  <Icon name="check" size={13} />
+                </button>
+                <button className={`btn btn--sm${rec.priority === 2 ? ' btn--primary' : ''}`} onClick={() => act(rec, 'priority')} title="Priority">
+                  <Icon name="star" size={13} />
+                </button>
+                <button className="btn btn--sm btn--ghost" onClick={() => act(rec, 'dismiss')} title="Not for me">
+                  <Icon name="x" size={13} />
+                </button>
+              </div>
+              {rec.added_at && <div className="u-xs u-mut" style={{ marginTop: 4 }}>added {relDate(rec.added_at.slice(0, 10))}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }

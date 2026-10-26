@@ -112,7 +112,7 @@ export function SettingsPage() {
   return (
     <div className="page">
       <div className="settingswrap">
-        <section className="card card--pad-lg">
+        <section className="card card--pad-lg u-hide">
           <div className="u-spread" style={{ marginBottom: 10 }}>
             <div className="u-col" style={{ gap: 3 }}>
               <h2 style={{ margin: 0 }}>Connected services</h2>
@@ -154,6 +154,47 @@ export function SettingsPage() {
               <Icon name="trash" size={13} /> Remove stored key
             </button>
           )}
+        </section>
+
+        <section className="card card--pad-lg">
+          <h2 style={{ marginBottom: 4 }}>Your library</h2>
+          <p className="u-sm u-mut" style={{ marginBottom: 14 }}>
+            Everything about getting data in, and what it adds up to.
+          </p>
+          <div className="settinglinks">
+            <Link to="/stats" className="settinglink">
+              <span className="settinglink__icon"><Icon name="chart" size={19} /></span>
+              <span className="u-col" style={{ gap: 2 }}>
+                <strong>Stats</strong>
+                <span className="u-xs u-mut">Ratings, activity and what you return to</span>
+              </span>
+              <Icon name="chevronRight" size={15} className="u-mut" />
+            </Link>
+            <Link to="/connections" className="settinglink">
+              <span className="settinglink__icon"><Icon name="key" size={19} /></span>
+              <span className="u-col" style={{ gap: 2 }}>
+                <strong>Connections</strong>
+                <span className="u-xs u-mut">Live sync, API keys, and how to export from everywhere else</span>
+              </span>
+              <Icon name="chevronRight" size={15} className="u-mut" />
+            </Link>
+            <Link to="/import" className="settinglink">
+              <span className="settinglink__icon"><Icon name="import" size={19} /></span>
+              <span className="u-col" style={{ gap: 2 }}>
+                <strong>Import a file</strong>
+                <span className="u-xs u-mut">Letterboxd, Goodreads, Audible, Spotify and more</span>
+              </span>
+              <Icon name="chevronRight" size={15} className="u-mut" />
+            </Link>
+            <Link to="/inbox" className="settinglink">
+              <span className="settinglink__icon"><Icon name="inbox" size={19} /></span>
+              <span className="u-col" style={{ gap: 2 }}>
+                <strong>Everything to check out</strong>
+                <span className="u-xs u-mut">All your lists in one place, across every kind of media</span>
+              </span>
+              <Icon name="chevronRight" size={15} className="u-mut" />
+            </Link>
+          </div>
         </section>
 
         <PasswordCard />

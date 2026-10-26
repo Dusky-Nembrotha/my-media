@@ -750,3 +750,73 @@ code {
   color: var(--good);
 }
 .importedline strong { font-weight: 680; }
+
+/* ======================================================= section done/to-do */
+.sectiontabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+}
+.sectiontabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  font-weight: 560;
+  color: var(--ink-3);
+  transition: background var(--fast), color var(--fast);
+}
+.sectiontabs button:hover { color: var(--ink); }
+.sectiontabs button.is-on {
+  background: var(--accent-soft);
+  color: color-mix(in oklab, var(--accent) 78%, var(--ink));
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.sectiontabs__count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.sectiontabs button.is-on .sectiontabs__count { background: var(--accent); color: var(--accent-ink); }
+
+.plannedcard { min-width: 0; }
+.plannedcard .poster__frame { opacity: 0.88; transition: opacity var(--fast); }
+.plannedcard:hover .poster__frame { opacity: 1; }
+.plannedcard__actions { display: flex; gap: 5px; margin-top: 7px; }
+.plannedcard__actions .btn { padding: 0 9px; }
+
+/* ========================================================= settings as a hub */
+.settinglinks { display: flex; flex-direction: column; gap: 8px; }
+.settinglink {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 14px;
+  border-radius: var(--r-md);
+  background: var(--canvas-2);
+  border: 1px solid var(--hairline);
+  transition: border-color var(--fast), background var(--fast);
+}
+.settinglink:hover { border-color: var(--hairline-strong); background: var(--surface-2); }
+.settinglink__icon { color: var(--accent); flex: 0 0 auto; }
+.settinglink strong { font-size: 14px; }
+.searchbtn--primary {
+  min-width: 260px;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--ink-2);
+}
+.searchbtn--primary:hover { background: color-mix(in oklab, var(--accent) 18%, transparent); }

@@ -1,14 +1,26 @@
 import type { MediaType } from './types'
 
-export const SECTION_META: Record<MediaType, { label: string; singular: string; verb: string; hue: string; aspect: string; icon: string; path: string }> = {
-  film: { label: 'Films', singular: 'Film', verb: 'Watched', hue: 'var(--hue-film)', aspect: '2 / 3', icon: 'film', path: '/films' },
-  tv: { label: 'TV', singular: 'Show', verb: 'Watched', hue: 'var(--hue-tv)', aspect: '2 / 3', icon: 'tv', path: '/tv' },
-  book: { label: 'Books', singular: 'Book', verb: 'Read', hue: 'var(--hue-book)', aspect: '2 / 3', icon: 'book', path: '/books' },
-  audiobook: { label: 'Audiobooks', singular: 'Audiobook', verb: 'Listened to', hue: 'var(--hue-audiobook)', aspect: '1 / 1', icon: 'headphones', path: '/audiobooks' },
-  album: { label: 'Music', singular: 'Album', verb: 'Listened to', hue: 'var(--hue-album)', aspect: '1 / 1', icon: 'disc', path: '/music' },
-  track: { label: 'Tracks', singular: 'Track', verb: 'Listened to', hue: 'var(--hue-track)', aspect: '1 / 1', icon: 'note', path: '/tracks' },
-  podcast: { label: 'Podcasts', singular: 'Podcast', verb: 'Listened to', hue: 'var(--hue-podcast)', aspect: '1 / 1', icon: 'mic', path: '/podcasts' },
-  game: { label: 'Games', singular: 'Game', verb: 'Played', hue: 'var(--hue-game)', aspect: '2 / 3', icon: 'gamepad', path: '/games' },
+interface SectionInfoMeta {
+  label: string
+  singular: string
+  verb: string        // what you did: "Watched"
+  done: string        // the tab for things you have finished
+  planned: string     // the tab for things you have not
+  hue: string
+  aspect: string
+  icon: string
+  path: string
+}
+
+export const SECTION_META: Record<MediaType, SectionInfoMeta> = {
+  film: { label: 'Films', singular: 'Film', verb: 'Watched', done: 'Watched', planned: 'To watch', hue: 'var(--hue-film)', aspect: '2 / 3', icon: 'film', path: '/films' },
+  tv: { label: 'TV', singular: 'Show', verb: 'Watched', done: 'Watched', planned: 'To watch', hue: 'var(--hue-tv)', aspect: '2 / 3', icon: 'tv', path: '/tv' },
+  book: { label: 'Books', singular: 'Book', verb: 'Read', done: 'Read', planned: 'To read', hue: 'var(--hue-book)', aspect: '2 / 3', icon: 'book', path: '/books' },
+  audiobook: { label: 'Audiobooks', singular: 'Audiobook', verb: 'Listened to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-audiobook)', aspect: '1 / 1', icon: 'headphones', path: '/audiobooks' },
+  album: { label: 'Music', singular: 'Album', verb: 'Listened to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-album)', aspect: '1 / 1', icon: 'disc', path: '/music' },
+  track: { label: 'Tracks', singular: 'Track', verb: 'Listened to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-track)', aspect: '1 / 1', icon: 'note', path: '/tracks' },
+  podcast: { label: 'Podcasts', singular: 'Podcast', verb: 'Listened to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-podcast)', aspect: '1 / 1', icon: 'mic', path: '/podcasts' },
+  game: { label: 'Games', singular: 'Game', verb: 'Played', done: 'Played', planned: 'To play', hue: 'var(--hue-game)', aspect: '2 / 3', icon: 'gamepad', path: '/games' },
 }
 
 export const TYPE_ORDER: MediaType[] = ['film', 'tv', 'book', 'audiobook', 'album', 'podcast', 'game', 'track']

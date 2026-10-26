@@ -9,7 +9,9 @@ import { currentUserId } from '../lib/user.js'
 export const router = Router()
 
 const SORTS = {
-  recent: 'last_on IS NULL, last_on DESC, updated_at DESC',
+  // Ties are common after an import, where everything shares one date:
+  // fall back to release date so the order means something.
+  recent: 'last_on IS NULL, last_on DESC, year IS NULL, year DESC, sort_title ASC',
   added: 'created_at DESC',
   rating: 'rating IS NULL, rating DESC, last_on DESC',
   title: 'sort_title ASC',
@@ -238,7 +240,8 @@ router.get('/activity', (req, res) => {
     `SELECT e.*, w.title, w.type, w.year, w.poster_url, w.creators
        FROM entries e JOIN works w ON w.id = e.work_id
       WHERE (? IS NULL OR w.type = ?)
-      ORDER BY ifnull(e.consumed_on, date(e.created_at)) DESC, e.id DESC
+      ORDER BY ifnull(e.consumed_on, date(e.created_at)) DESC,
+               w.year IS NULL, w.year DESC, w.sort_title ASC
       LIMIT ? OFFSET ?`,
     type, type, limit, offset,
   )

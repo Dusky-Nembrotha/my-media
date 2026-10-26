@@ -70,30 +70,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="nav__icon"><Icon name="sparkle" size={18} /></span>
           <span className="nav__label">For you</span>
         </NavLink>
-        <NavLink to="/inbox" className={({ isActive }) => `nav${isActive ? ' is-active' : ''}`}>
-          <span className="nav__icon"><Icon name="inbox" size={18} /></span>
-          <span className="nav__label">To check out</span>
-          {counts.recsOpen ? <span className="nav__count u-tnum">{counts.recsOpen}</span> : null}
-        </NavLink>
-        <NavLink to="/lists" className={({ isActive }) => `nav${isActive ? ' is-active' : ''}`}>
-          <span className="nav__icon"><Icon name="list" size={18} /></span>
-          <span className="nav__label">Lists</span>
-          {counts.lists ? <span className="nav__count u-tnum">{counts.lists}</span> : null}
-        </NavLink>
-        <NavLink to="/stats" className={({ isActive }) => `nav${isActive ? ' is-active' : ''}`}>
-          <span className="nav__icon"><Icon name="chart" size={18} /></span>
-          <span className="nav__label">Stats</span>
-        </NavLink>
 
-        <div className="rail__group u-caps">Setup</div>
-        <NavLink to="/connections" className={({ isActive }) => `nav${isActive ? ' is-active' : ''}`}>
-          <span className="nav__icon"><Icon name="key" size={18} /></span>
-          <span className="nav__label">Connections</span>
-        </NavLink>
-        <NavLink to="/import" className={({ isActive }) => `nav${isActive ? ' is-active' : ''}`}>
-          <span className="nav__icon"><Icon name="import" size={18} /></span>
-          <span className="nav__label">Import</span>
-        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav${isActive ? ' is-active' : ''}`}>
           <span className="nav__icon"><Icon name="settings" size={18} /></span>
           <span className="nav__label">Settings</span>
@@ -138,19 +115,12 @@ export function Shell({ children }: { children: ReactNode }) {
               </span>
             </span>
           )}
-          <button className="searchbtn" onClick={() => setPaletteOpen(true)}>
-            <Icon name="search" size={15} />
-            <span className="u-grow" style={{ textAlign: 'left' }}>Search…</span>
+          <button className="searchbtn searchbtn--primary" onClick={() => setPaletteOpen(true)}>
+            <Icon name="search" size={16} />
+            <span className="u-grow" style={{ textAlign: 'left' }}>Search or log something…</span>
             <kbd>⌘K</kbd>
           </button>
-          <button
-            className="btn btn--primary"
-            onClick={() => openLog({ kind: 'blank', type: sectionType ?? undefined })}
-            title={sectionType ? `Log a ${SECTION_META[sectionType].singular.toLowerCase()}` : 'Log something'}
-          >
-            <Icon name="plus" size={15} />
-            <span className="log-label">{sectionType ? `Log ${SECTION_META[sectionType].singular.toLowerCase()}` : 'Log'}</span>
-          </button>
+
         </header>
         {children}
       </div>
@@ -165,13 +135,9 @@ export function Shell({ children }: { children: ReactNode }) {
         <NavLink to="/recommended" className={({ isActive }) => `tab${isActive ? ' is-active' : ''}`}>
           <Icon name="sparkle" size={19} /><span>For you</span>
         </NavLink>
-        <NavLink to="/inbox" className={({ isActive }) => `tab${isActive ? ' is-active' : ''}`}>
-          <span className="tab__icon">
-            <Icon name="inbox" size={19} />
-            {counts.recsOpen > 0 && <span className="tab__badge u-tnum">{counts.recsOpen}</span>}
-          </span>
-          <span>To check out</span>
-        </NavLink>
+        <button className="tab" onClick={() => setPaletteOpen(true)}>
+          <Icon name="search" size={19} /><span>Search</span>
+        </button>
         <button
           className={`tab${moreOpen ? ' is-active' : ''}`}
           onClick={() => setMoreOpen(true)}
@@ -205,7 +171,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <span className="sheet__title u-grow">Everything else</span>
             </div>
             <div className="moresheet__list">
-              <Link to="/lists" className="palette__item"><Icon name="list" size={18} /> <span className="u-grow">Lists</span>{counts.lists ? <span className="u-xs u-mut">{counts.lists}</span> : null}</Link>
+              <Link to="/settings" className="palette__item"><Icon name="settings" size={18} /> <span className="u-grow">Settings</span></Link>
               <Link to="/stats" className="palette__item"><Icon name="chart" size={18} /> <span className="u-grow">Stats</span></Link>
               <Link to="/connections" className="palette__item"><Icon name="key" size={18} /> <span className="u-grow">Connections</span></Link>
               <Link to="/import" className="palette__item"><Icon name="import" size={18} /> <span className="u-grow">Import</span></Link>
@@ -242,8 +208,7 @@ function pageTitle(path: string, sections: { type: string; label: string; works:
     '/': { title: 'Home', crumb: null },
     '/diary': { title: 'Diary', crumb: 'Everything you have logged, newest first' },
     '/recommended': { title: 'For you', crumb: 'Built from your own ratings' },
-    '/inbox': { title: 'To check out', crumb: 'Recommendations you want to remember' },
-    '/lists': { title: 'Lists', crumb: null },
+    '/inbox': { title: 'To check out', crumb: 'Everything you have been meaning to get to' },
     '/stats': { title: 'Stats', crumb: null },
     '/import': { title: 'Import', crumb: 'Bring in Letterboxd, Goodreads, Audible, Spotify and more' },
     '/connections': { title: 'Connections', crumb: 'Live sync, API keys and how to export from everywhere else' },
