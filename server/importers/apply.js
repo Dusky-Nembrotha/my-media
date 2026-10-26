@@ -122,11 +122,14 @@ function applyEntry(r, work, source, summary) {
   }
 
   if (existing) {
-    // Only fill gaps, never clobber something the user has since edited.
     const patch = {}
-    if (r.rating != null && existing.rating == null) patch.rating = r.rating
+    // Anything you typed in here yourself outranks a file. Otherwise a fresh
+    // export states your current view, so let it correct an older import —
+    // silently keeping stale data was losing real ratings.
+    const handEdited = existing.source === 'manual'
+    if (r.rating != null && (existing.rating == null || !handEdited)) patch.rating = r.rating
     if (r.consumed_on && !existing.consumed_on) patch.consumed_on = r.consumed_on
-    if (r.review && !existing.review) patch.review = r.review
+    if (r.review && (!existing.review || !handEdited)) patch.review = r.review
     if (r.notes && !existing.notes) patch.notes = r.notes
     if (r.liked && !existing.liked) patch.liked = 1
     if (r.progress && !existing.progress) patch.progress = r.progress
