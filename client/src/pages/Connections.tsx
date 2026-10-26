@@ -45,6 +45,36 @@ interface OtherService {
   settingKey?: string
 }
 
+
+// Known endings only, so filenames like Audible.Library.csv are left alone.
+const TLD = '(?:com|org|net|io|tv|fm|app|dev|ai|me|gg|co\\.uk|co)'
+const URL_RE = new RegExp(`((?:https?://)?(?:[a-z0-9-]+\\.)+${TLD}(?:/[^\\s,)]*)?)`, 'gi')
+
+/** Turns the addresses inside an instruction into links you can just click. */
+function linkify(text: string) {
+  const parts = String(text).split(URL_RE)
+  return parts.map((part, i) => {
+    if (i % 2 === 0 || !part) return part
+    const trimmed = part.replace(/[.,;:]+$/, '')
+    const tail = part.slice(trimmed.length)
+    const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+    return (
+      <span key={i}>
+        <a className="steplink" href={href} target="_blank" rel="noreferrer">{trimmed}</a>
+        {tail}
+      </span>
+    )
+  })
+}
+
+function Steps({ steps }: { steps: string[] }) {
+  return (
+    <ol className="steps">
+      {steps.map((step, i) => <li key={i}>{linkify(step)}</li>)}
+    </ol>
+  )
+}
+
 const GROUPS: { title: string; types: MediaType[] }[] = [
   { title: 'Films & TV', types: ['film', 'tv'] },
   { title: 'Books & audiobooks', types: ['book', 'audiobook'] },
@@ -311,9 +341,7 @@ function LiveCard({ service, onChange }: { service: LiveService; onChange: () =>
 
       {open && (
         <div className="connsetup">
-          <ol className="steps">
-            {service.instructions.map((step, i) => <li key={i}>{step}</li>)}
-          </ol>
+          <Steps steps={service.instructions} />
           <div className="u-col" style={{ gap: 10 }}>
             {service.fields.map((f) => (
               <div className="field" key={f.key}>
@@ -360,7 +388,7 @@ function OtherCard({ service }: { service: OtherService }) {
         {isMetadata && <span className={`conndot${service.connected ? ' is-on' : ''}`} />}
       </div>
 
-      <p className="u-xs u-mut" style={{ margin: 0, lineHeight: 1.55 }}>{service.blurb}</p>
+      <p className="u-xs u-mut" style={{ margin: 0, lineHeight: 1.55 }}>{linkify(service.blurb)}</p>
       {service.alternative && (
         <p className="u-xs" style={{ margin: 0, color: 'var(--ink-3)' }}>
           <Icon name="sparkle" size={11} /> {service.alternative}
@@ -387,7 +415,7 @@ function OtherCard({ service }: { service: OtherService }) {
 
       {open && service.instructions?.length ? (
         <div className="connsetup">
-          <ol className="steps">{service.instructions.map((step, i) => <li key={i}>{step}</li>)}</ol>
+          <Steps steps={service.instructions} />
         </div>
       ) : null}
     </article>

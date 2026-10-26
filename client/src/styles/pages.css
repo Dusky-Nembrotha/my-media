@@ -731,3 +731,12 @@ code {
   background: color-mix(in oklab, var(--bad) 10%, transparent);
   border: 1px solid color-mix(in oklab, var(--bad) 28%, transparent);
 }
+
+.steplink {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.steplink:hover { text-decoration-color: var(--accent); }

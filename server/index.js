@@ -9,6 +9,7 @@ import { router as misc } from './routes/misc.js'
 import { router as connections } from './routes/connections.js'
 import { router as auth } from './routes/auth.js'
 import { requireAuth, applyEnvPassword } from './lib/auth.js'
+import { queueAll, queueAllRecArtwork } from './enrich.js'
 
 const app = express()
 const PORT = Number(process.env.PORT || 4123)
@@ -54,4 +55,9 @@ if (existsSync(dist)) {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  My Media — http://localhost:${PORT}`)
   console.log(`  On your network: http://<this-machine>:${PORT}\n`)
+
+  // The queue lives in memory, so pick up anything a restart interrupted.
+  const pending = queueAll({ onlyMissing: true })
+  queueAllRecArtwork()
+  if (pending) console.log(`  resuming metadata for ${pending} titles\n`)
 })

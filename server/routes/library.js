@@ -3,7 +3,7 @@ import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
 import { searchProviders, searchAllTypes } from '../providers/index.js'
-import { queueEnrichment } from '../enrich.js'
+import { queueEnrichment, prioritise } from '../enrich.js'
 
 export const router = Router()
 
@@ -80,7 +80,9 @@ router.get('/works', (req, res) => {
   )
   const total = get(`SELECT count(*) c FROM (${filtered})`, ...params, ...outerParams).c
 
-  res.json({ works: rows.map(cardOf), total, limit, offset })
+  const cards = rows.map(cardOf)
+  prioritise(cards)
+  res.json({ works: cards, total, limit, offset })
 })
 
 /** Facets for the filter bar. */
@@ -135,6 +137,7 @@ router.get('/works/:id', (req, res) => {
     .slice(0, 8)
     .map((x) => cardOf(x.row))
 
+  prioritise([work, ...related])
   res.json({ work, related })
 })
 
@@ -238,6 +241,7 @@ router.get('/activity', (req, res) => {
       LIMIT ? OFFSET ?`,
     type, type, limit, offset,
   )
+  prioritise(rows.map((r) => ({ id: r.work_id, poster_url: r.poster_url })))
   res.json({
     activity: rows.map((r) => ({
       entry_id: r.id,

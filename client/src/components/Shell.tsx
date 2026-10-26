@@ -6,7 +6,7 @@ import { useApp } from '../lib/store'
 import { SECTION_META, TYPE_ORDER } from '../lib/format'
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { sections, counts, toasts, dismissToast, setPaletteOpen, openLog } = useApp()
+  const { sections, counts, toasts, dismissToast, setPaletteOpen, openLog, enrich } = useApp()
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('mm-rail') === 'collapsed')
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
@@ -127,6 +127,17 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="topbar__title u-trunc">{title.title}</span>
             {title.crumb && <span className="topbar__crumb u-trunc">{title.crumb}</span>}
           </div>
+          {enrich && enrich.pending > 0 && (
+            <span
+              className="fillpill"
+              title={`Fetching artwork and details${enrich.lastTitle ? ` — ${enrich.lastTitle}` : ''}`}
+            >
+              <span className="spinner" />
+              <span className="fillpill__text">
+                Filling in details · <span className="u-tnum">{enrich.pending}</span> left
+              </span>
+            </span>
+          )}
           <button className="searchbtn" onClick={() => setPaletteOpen(true)}>
             <Icon name="search" size={15} />
             <span className="u-grow" style={{ textAlign: 'left' }}>Search…</span>

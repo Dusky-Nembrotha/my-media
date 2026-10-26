@@ -877,3 +877,23 @@ kbd {
     ),
     var(--glass);
 }
+
+/* Shown in the header whenever metadata is being fetched in the background. */
+.fillpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+@media (max-width: 760px) {
+  .fillpill { padding: 0 8px; }
+  .fillpill__text { display: none; }
+}

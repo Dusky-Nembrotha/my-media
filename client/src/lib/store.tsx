@@ -10,7 +10,16 @@ export type LogTarget =
   | { kind: 'hit'; hit: ProviderHit }
   | { kind: 'blank'; type?: MediaType; mode?: 'log' | 'want' }
 
+export interface EnrichState {
+  pending: number
+  done: number
+  missingArtwork: number
+  total: number
+  lastTitle: string | null
+}
+
 interface Ctx {
+  enrich: EnrichState | null
   sections: SectionInfo[]
   counts: { works: number; entries: number; recsOpen: number; lists: number }
   settings: Record<string, any>
@@ -38,6 +47,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [version, setVersion] = useState(0)
+  const [enrich, setEnrich] = useState<EnrichState | null>(null)
   const [theme, setThemeState] = useState<'dark' | 'light'>(
     () => (localStorage.getItem('mm-theme') as 'dark' | 'light') || 'dark',
   )
@@ -68,6 +78,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { void refresh() }, [refresh])
 
+  /*
+   * While metadata is being filled in, keep an eye on the queue and nudge the
+   * pages to refetch, so artwork appears as it arrives rather than on reload.
+   */
+  useEffect(() => {
+    let stop = false
+    let timer: number | undefined
+    let wasPending = 0
+
+    const tick = async () => {
+      if (stop) return
+      try {
+        const next = await api.get<EnrichState>('/enrich/status')
+        setEnrich(next)
+        // Refetch while it works, and once more when it finishes.
+        if (next.pending > 0 || wasPending > 0) setVersion((v) => v + 1)
+        wasPending = next.pending
+        timer = window.setTimeout(tick, next.pending > 0 ? 6000 : 30000)
+      } catch {
+        timer = window.setTimeout(tick, 30000)
+      }
+    }
+    void tick()
+    return () => { stop = true; if (timer) clearTimeout(timer) }
+  }, [])
+
   const toast = useCallback((message: string, tone: Toast['tone'] = 'ok') => {
     const id = Date.now() + Math.random()
     setToasts((t) => [...t, { id, message, tone }])
@@ -75,6 +111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<Ctx>(() => ({
+    enrich,
     sections,
     counts,
     settings,
@@ -90,7 +127,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     theme,
     setTheme,
     version,
-  }), [sections, counts, settings, refresh, toast, toasts, logTarget, paletteOpen, theme, setTheme, version])
+  }), [enrich, sections, counts, settings, refresh, toast, toasts, logTarget, paletteOpen, theme, setTheme, version])
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>
 }

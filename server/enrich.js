@@ -12,9 +12,10 @@ const queue = []
 const queued = new Set()
 const forced = new Set()
 let running = 0
-// One at a time: the free metadata APIs throttle bursts, and an empty reply
-// looks exactly like "not found", which would poison the record.
-const CONCURRENCY = 1
+// The per-host gates in lib/http.js already serialise each provider, so a few
+// workers mainly overlap latency between *different* providers (a book waiting
+// on Open Library while a film waits on Wikipedia).
+const CONCURRENCY = 3
 
 export const state = {
   get pending() { return queue.length + running },
@@ -24,15 +25,31 @@ export const state = {
   running: false,
 }
 
-export function queueEnrichment(workIds, { force = false } = {}) {
+export function queueEnrichment(workIds, { force = false, priority = false } = {}) {
   for (const id of workIds) {
     if (force) forced.add(id)
     if (queued.has(id)) continue
     queued.add(id)
-    queue.push(id)
+    // What is on screen gets filled in first; a big import works through the
+    // rest behind it.
+    if (priority) queue.unshift(id)
+    else queue.push(id)
   }
   pump()
   return state.pending
+}
+
+/**
+ * Called by the read endpoints: anything being looked at that still lacks
+ * artwork goes to the front of the queue.
+ */
+export function prioritise(works) {
+  const ids = (works || [])
+    .filter((w) => w && w.id && !w.poster_url)
+    .map((w) => w.id)
+    .slice(0, 40)
+  if (ids.length) queueEnrichment(ids, { priority: true })
+  return ids.length
 }
 
 export function queueAll({ onlyMissing = true, type, force = false } = {}) {

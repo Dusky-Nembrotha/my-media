@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon'
 import { PosterCard, PosterSkeleton } from '../components/Poster'
 import { Stars } from '../components/Stars'
 import { Empty, Modal } from '../components/Modal'
-import { useFetch } from '../lib/store'
+import { useApp, useFetch } from '../lib/store'
 import { qs } from '../lib/api'
 import { SECTION_META, creatorLine, fmtDate, fmtRuntime } from '../lib/format'
 import type { MediaType, WorkCard } from '../lib/types'
@@ -51,7 +51,8 @@ export function SectionPage({ type }: { type: MediaType }) {
     minRating: filters.minRating, status: filters.status,
     unrated: filters.unrated ? 1 : null,
   })
-  const { data, loading } = useFetch<{ works: WorkCard[]; total: number }>(`/works${query}`, [query])
+  const { version } = useApp()
+  const { data, loading } = useFetch<{ works: WorkCard[]; total: number }>(`/works${query}`, [query, version])
   const facets = useFetch<{ genres: { name: string; count: number }[]; decades: { name: string; count: number }[] }>(`/facets${qs({ type })}`)
 
   const active = useMemo(() => {
