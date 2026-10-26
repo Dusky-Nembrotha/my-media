@@ -1,4 +1,5 @@
-const BASE = '/api'
+// Vite sets BASE_URL from the build's `base`; '/' when mounted at the root.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '') + '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {

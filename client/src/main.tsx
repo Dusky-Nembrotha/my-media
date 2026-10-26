@@ -52,7 +52,7 @@ function Root() {
   if (!status.authenticated) return <LoginGate status={status} onIn={check} />
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AppProvider>
         <Shell>
           <Routes>
