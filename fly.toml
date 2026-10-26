@@ -1,0 +1,32 @@
+# Fly.io deployment. See DEPLOY.md for the one-time setup.
+app = "my-media"
+primary_region = "lhr"
+
+[build]
+
+[env]
+  PORT = "4123"
+  MYMEDIA_DATA = "/data"
+
+[http_service]
+  internal_port = 4123
+  force_https = true
+  # Sleep when nobody is using it and wake on the next request: this keeps a
+  # personal app inside the free allowance, at the cost of a few seconds' wake.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+# SQLite needs a real disk. One machine only — a volume attaches to one at a time.
+[[mounts]]
+  source = "mymedia_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

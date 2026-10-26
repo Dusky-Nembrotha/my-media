@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './styles/tokens.css'
@@ -21,9 +21,37 @@ import { ImportPage } from './pages/Import'
 import { SettingsPage } from './pages/Settings'
 import { ConnectionsPage } from './pages/Connections'
 import { SECTION_META, TYPE_ORDER } from './lib/format'
+import { LoginGate } from './pages/Login'
+import { api } from './lib/api'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+interface Status { configured: boolean; authenticated: boolean; canSetup: boolean; lockedOut: boolean }
+
+function Root() {
+  const [status, setStatus] = useState<Status | null>(null)
+
+  const check = useCallback(async () => {
+    try {
+      setStatus(await api.get<Status>('/auth/status'))
+    } catch {
+      // If even the status call fails the server is unreachable; let the app
+      // mount and show its own error rather than hanging on a blank screen.
+      setStatus({ configured: false, authenticated: true, canSetup: true, lockedOut: false })
+    }
+  }, [])
+
+  useEffect(() => { void check() }, [check])
+
+  // A 401 from anywhere means the session lapsed: drop back to the login.
+  useEffect(() => {
+    const onUnauthorised = () => setStatus((s) => (s ? { ...s, authenticated: false } : s))
+    window.addEventListener('mm-unauthenticated', onUnauthorised)
+    return () => window.removeEventListener('mm-unauthenticated', onUnauthorised)
+  }, [])
+
+  if (!status) return <div className="loginwrap"><span className="spinner" /></div>
+  if (!status.authenticated) return <LoginGate status={status} onIn={check} />
+
+  return (
     <BrowserRouter>
       <AppProvider>
         <Shell>
@@ -49,5 +77,11 @@ createRoot(document.getElementById('root')!).render(
         <Palette />
       </AppProvider>
     </BrowserRouter>
+  )
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <Root />
   </StrictMode>,
 )

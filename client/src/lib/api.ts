@@ -9,6 +9,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const text = await res.text()
   const data = text ? (() => { try { return JSON.parse(text) } catch { return { error: text } } })() : null
+  if (res.status === 401 && data?.unauthenticated) {
+    window.dispatchEvent(new CustomEvent('mm-unauthenticated'))
+  }
   if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`)
   return data as T
 }

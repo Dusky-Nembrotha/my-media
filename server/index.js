@@ -7,6 +7,8 @@ import { router as stats } from './routes/stats.js'
 import { router as imports } from './routes/imports.js'
 import { router as misc } from './routes/misc.js'
 import { router as connections } from './routes/connections.js'
+import { router as auth } from './routes/auth.js'
+import { requireAuth, applyEnvPassword } from './lib/auth.js'
 
 const app = express()
 const PORT = Number(process.env.PORT || 4123)
@@ -15,7 +17,15 @@ const dist = join(root, 'dist')
 
 app.use(express.json({ limit: '5mb' }))
 app.disable('x-powered-by')
+// Fly (and any reverse proxy) terminates TLS for us; trust it so that client
+// IPs and the https flag are read from the forwarding headers.
+app.set('trust proxy', true)
 
+// A deployment given MYMEDIA_PASSWORD is never open, even on first boot.
+if (applyEnvPassword()) console.log('  password set from MYMEDIA_PASSWORD')
+
+app.use('/api', auth)
+app.use('/api', requireAuth)
 app.use('/api', library)
 app.use('/api', recs)
 app.use('/api', stats)

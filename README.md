@@ -11,6 +11,9 @@ anywhere except the metadata lookups needed to fetch artwork.
 
 ## Running it
 
+Locally on your own machine, or [deployed to a public URL](DEPLOY.md).
+
+
 ```bash
 npm install --no-bin-links     # --no-bin-links is required: this drive is exFAT, which has no symlinks
 npm run build                  # builds the browser app into dist/
@@ -26,6 +29,18 @@ npm run dev                    # API on :4123, UI on :5173 with live reload
 ```
 
 Requires Node 22.5+ (uses the built-in `node:sqlite`, so there is nothing to compile).
+
+### Signing in
+
+On your own network the app is open, as a local tool should be. The moment it is
+reachable from outside, a password is required:
+
+- Open it from your own network and you will be asked to choose one, **or**
+- set `MYMEDIA_PASSWORD` before first boot (how a hosted deployment should do it).
+
+A deployment with no password set refuses to let anyone choose one over the public
+internet — otherwise whoever found the address first would own it. Sessions are
+signed cookies lasting 60 days; changing the password signs every device out.
 
 ### First run
 

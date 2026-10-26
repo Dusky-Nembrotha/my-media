@@ -700,3 +700,34 @@ code {
 @media (max-width: 620px) {
   .conngrid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==================================================================== login */
+.loginwrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  position: relative;
+  z-index: 1;
+}
+.logincard {
+  width: min(100%, 380px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 30px 28px 28px;
+  border-radius: var(--r-lg);
+  background: var(--canvas-2);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-3);
+}
+.logincard h1 { font-size: 22px; letter-spacing: -0.025em; margin: 4px 0 0; }
+.loginerror {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--bad);
+  background: color-mix(in oklab, var(--bad) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--bad) 28%, transparent);
+}
