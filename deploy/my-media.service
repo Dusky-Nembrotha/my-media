@@ -1,0 +1,26 @@
+[Unit]
+Description=My Media — personal media log
+Documentation=https://github.com/Dusky-Nembrotha/my-media
+After=network-online.target
+Wants=network-online.target
+# The code lives on the external SSD, which udisks mounts after boot.
+RequiresMountsFor=/media/charlie/Extreme SSD
+
+[Service]
+Type=simple
+User=charlie
+Group=charlie
+WorkingDirectory=/media/charlie/Extreme SSD/Claude Code/My Media
+ExecStart=/home/charlie/.nvm/versions/node/v22.23.2/bin/node server/index.js
+Environment=NODE_ENV=production
+Environment=PORT=4123
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=120
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=my-media
+
+[Install]
+WantedBy=multi-user.target
