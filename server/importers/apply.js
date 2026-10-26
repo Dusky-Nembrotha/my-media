@@ -127,9 +127,11 @@ function applyEntry(r, work, source, summary) {
     // export states your current view, so let it correct an older import —
     // silently keeping stale data was losing real ratings.
     const handEdited = existing.source === 'manual'
-    if (r.rating != null && (existing.rating == null || !handEdited)) patch.rating = r.rating
+    const corrects = (incoming, current) =>
+      incoming != null && incoming !== current && (current == null || !handEdited)
+    if (corrects(r.rating, existing.rating)) patch.rating = r.rating
     if (r.consumed_on && !existing.consumed_on) patch.consumed_on = r.consumed_on
-    if (r.review && (!existing.review || !handEdited)) patch.review = r.review
+    if (corrects(r.review, existing.review)) patch.review = r.review
     if (r.notes && !existing.notes) patch.notes = r.notes
     if (r.liked && !existing.liked) patch.liked = 1
     if (r.progress && !existing.progress) patch.progress = r.progress
