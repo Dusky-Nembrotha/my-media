@@ -18,7 +18,7 @@ export function getConnector(id) {
  */
 export const FILE_ONLY = [
   {
-    id: 'letterboxd', label: 'Letterboxd', mediaTypes: ['film'], kind: 'file',
+    id: 'letterboxd', brand: '#00c030', label: 'Letterboxd', mediaTypes: ['film'], kind: 'file',
     website: 'https://letterboxd.com',
     blurb: 'Letterboxd has no public API — theirs is still in closed beta and has been for years. '
       + 'The export is complete though, and importing it again later only adds what is new.',
@@ -30,7 +30,7 @@ export const FILE_ONLY = [
     alternative: 'Trakt connects live and covers the same ground — many people run both.',
   },
   {
-    id: 'goodreads', label: 'Goodreads', mediaTypes: ['book'], kind: 'file',
+    id: 'goodreads', brand: '#8a6a4b', label: 'Goodreads', mediaTypes: ['book'], kind: 'file',
     website: 'https://goodreads.com',
     blurb: 'Goodreads shut its API down in December 2020 and has issued no keys since, so an export is the only route.',
     instructions: [
@@ -41,7 +41,7 @@ export const FILE_ONLY = [
     alternative: 'The StoryGraph exports the same data if you have moved across.',
   },
   {
-    id: 'audible', label: 'Audible', mediaTypes: ['audiobook'], kind: 'file',
+    id: 'audible', brand: '#f8991c', label: 'Audible', mediaTypes: ['audiobook'], kind: 'file',
     website: 'https://audible.co.uk',
     blurb: 'Audible has no public API and no export button. Amazon will post you the data if you ask.',
     instructions: [
@@ -52,7 +52,7 @@ export const FILE_ONLY = [
     ],
   },
   {
-    id: 'imdb', label: 'IMDb', mediaTypes: ['film', 'tv'], kind: 'file',
+    id: 'imdb', brand: '#f5c518', label: 'IMDb', mediaTypes: ['film', 'tv'], kind: 'file',
     website: 'https://imdb.com',
     blurb: 'IMDb has no public API for your own ratings — the paid one is for licensing their catalogue.',
     instructions: [
@@ -62,7 +62,7 @@ export const FILE_ONLY = [
     ],
   },
   {
-    id: 'netflix', label: 'Netflix', mediaTypes: ['film', 'tv'], kind: 'file',
+    id: 'netflix', brand: '#e50914', label: 'Netflix', mediaTypes: ['film', 'tv'], kind: 'file',
     website: 'https://netflix.com',
     blurb: 'No public API. The viewing activity export is complete but has no ratings in it.',
     instructions: [
@@ -72,7 +72,7 @@ export const FILE_ONLY = [
     ],
   },
   {
-    id: 'justwatch', label: 'JustWatch', mediaTypes: ['film', 'tv'], kind: 'file',
+    id: 'justwatch', brand: '#fbc500', label: 'JustWatch', mediaTypes: ['film', 'tv'], kind: 'file',
     website: 'https://justwatch.com',
     blurb: 'No public API, but the export covers your watchlist, seen list and ratings.',
     instructions: [
@@ -81,7 +81,7 @@ export const FILE_ONLY = [
     ],
   },
   {
-    id: 'storygraph', label: 'The StoryGraph', mediaTypes: ['book', 'audiobook'], kind: 'file',
+    id: 'storygraph', brand: '#e4674e', label: 'The StoryGraph', mediaTypes: ['book', 'audiobook'], kind: 'file',
     website: 'https://thestorygraph.com',
     blurb: 'No public API yet. The export is rich — moods, pace and content warnings all come across as tags.',
     instructions: [
@@ -95,7 +95,7 @@ export const FILE_ONLY = [
 /** The metadata providers — not accounts, but worth seeing in one place. */
 export const METADATA = [
   {
-    id: 'tmdb', label: 'TMDB', mediaTypes: ['film', 'tv'], kind: 'metadata-key',
+    id: 'tmdb', brand: '#01b4e4', label: 'TMDB', mediaTypes: ['film', 'tv'], kind: 'metadata-key',
     website: 'https://themoviedb.org',
     blurb: 'Optional but the single best upgrade: proper film and TV genres, cast, keywords and '
       + '"people also liked" for recommendations. Free and approved instantly.',
@@ -108,7 +108,7 @@ export const METADATA = [
     settingKey: 'tmdb_api_key',
   },
   {
-    id: 'omdb', label: 'OMDb (IMDb & Rotten Tomatoes)', mediaTypes: ['film', 'tv'], kind: 'metadata-key',
+    id: 'omdb', brand: '#ffb300', label: 'OMDb (IMDb & Rotten Tomatoes)', mediaTypes: ['film', 'tv'], kind: 'metadata-key',
     website: 'https://www.omdbapi.com',
     blurb: 'Public scores for film and TV: IMDb, Rotten Tomatoes and Metacritic, all from one request. '
       + 'IMDb and Rotten Tomatoes have no free API of their own, so this is the way to get them.',
@@ -121,7 +121,7 @@ export const METADATA = [
     settingKey: 'omdb_api_key',
   },
   {
-    id: 'googlebooks', label: 'Google Books', mediaTypes: ['book'], kind: 'metadata-key',
+    id: 'googlebooks', brand: '#4285f4', label: 'Google Books', mediaTypes: ['book'], kind: 'metadata-key',
     website: 'https://books.google.com',
     blurb: 'Steadier book details than Open Library: one published edition rather than every edition '
       + 'in every language at once, so titles, authors, page counts and synopses are the publisher\'s own. '
@@ -135,11 +135,11 @@ export const METADATA = [
     ],
     settingKey: 'google_books_api_key',
   },
-  { id: 'openlibrary', label: 'Open Library', mediaTypes: ['book'], kind: 'metadata-free', website: 'https://openlibrary.org', blurb: 'Covers, authors, subjects and ratings for books. No key needed; already in use.' },
-  { id: 'itunes', label: 'Apple', mediaTypes: ['album', 'audiobook', 'podcast'], kind: 'metadata-free', website: 'https://music.apple.com', blurb: 'Artwork and metadata for music, audiobooks and podcasts. No key needed; already in use.' },
-  { id: 'musicbrainz', label: 'MusicBrainz', mediaTypes: ['album'], kind: 'metadata-free', website: 'https://musicbrainz.org', blurb: 'Release data and genre tags, with cover art from the Cover Art Archive. No key needed.' },
-  { id: 'tvmaze', label: 'TVmaze', mediaTypes: ['tv'], kind: 'metadata-free', website: 'https://tvmaze.com', blurb: 'TV artwork, genres, networks and episode counts. No key needed; already in use.' },
-  { id: 'wikidata', label: 'Wikipedia & Wikidata', mediaTypes: ['film', 'game'], kind: 'metadata-free', website: 'https://wikidata.org', blurb: 'Poster art, directors, genres and runtimes for films and games when TMDB is not connected.' },
+  { id: 'openlibrary', brand: '#b7410e', label: 'Open Library', mediaTypes: ['book'], kind: 'metadata-free', website: 'https://openlibrary.org', blurb: 'Covers, authors, subjects and ratings for books. No key needed; already in use.' },
+  { id: 'itunes', brand: '#fa243c', label: 'Apple', mediaTypes: ['album', 'audiobook', 'podcast'], kind: 'metadata-free', website: 'https://music.apple.com', blurb: 'Artwork and metadata for music, audiobooks and podcasts. No key needed; already in use.' },
+  { id: 'musicbrainz', brand: '#ba478f', label: 'MusicBrainz', mediaTypes: ['album'], kind: 'metadata-free', website: 'https://musicbrainz.org', blurb: 'Release data and genre tags, with cover art from the Cover Art Archive. No key needed.' },
+  { id: 'tvmaze', brand: '#3c948b', label: 'TVmaze', mediaTypes: ['tv'], kind: 'metadata-free', website: 'https://tvmaze.com', blurb: 'TV artwork, genres, networks and episode counts. No key needed; already in use.' },
+  { id: 'wikidata', brand: '#3366cc', label: 'Wikipedia & Wikidata', mediaTypes: ['film', 'game'], kind: 'metadata-free', website: 'https://wikidata.org', blurb: 'Poster art, directors, genres and runtimes for films and games when TMDB is not connected.' },
 ]
 
 export function catalogue() {
@@ -147,6 +147,7 @@ export function catalogue() {
     live: LIVE.map((c) => ({
       id: c.id,
       label: c.label,
+      brand: c.brand || null,
       mediaTypes: c.mediaTypes,
       kind: c.kind,
       capabilities: c.capabilities || [],

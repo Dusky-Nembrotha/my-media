@@ -18,6 +18,7 @@ interface LiveService {
   website: string
   blurb: string
   fields: Field[]
+  brand?: string | null
   instructions: string[]
   options: Option[]
   history?: History | null
@@ -49,6 +50,7 @@ interface OtherService {
   kind: string
   website: string
   blurb: string
+  brand?: string | null
   instructions?: string[]
   alternative?: string
   connected?: boolean
@@ -298,8 +300,12 @@ function LiveCard({ service, onChange }: { service: LiveService; onChange: () =>
   const imported = (service.history?.entries ?? 0) > 0
 
   return (
-    <article className={`conncard${connected || imported ? ' is-connected' : ''}`}>
+    <article
+      className={`conncard${connected || imported ? ' is-connected' : ''}`}
+      style={service.brand ? ({ ['--brand' as string]: service.brand }) : undefined}
+    >
       <div className="conncard__head">
+        <ServiceMark service={service} />
         <div className="u-col u-grow" style={{ gap: 4, minWidth: 0 }}>
           <div className="u-row u-wrap" style={{ gap: 8 }}>
             <strong style={{ fontSize: 15 }}>{service.label}</strong>
@@ -412,8 +418,12 @@ function OtherCard({ service, onSaved }: { service: OtherService; onSaved: () =>
   const isMetadata = service.kind.startsWith('metadata')
   const imported = (service.history?.entries ?? 0) > 0
   return (
-    <article className={`conncard${(isMetadata && service.connected) || imported ? ' is-connected' : ''}`}>
+    <article
+      className={`conncard${(isMetadata && service.connected) || imported ? ' is-connected' : ''}`}
+      style={service.brand ? ({ ['--brand' as string]: service.brand }) : undefined}
+    >
       <div className="conncard__head">
+        <ServiceMark service={service} />
         <div className="u-col u-grow" style={{ gap: 4, minWidth: 0 }}>
           <div className="u-row u-wrap" style={{ gap: 8 }}>
             <strong style={{ fontSize: 15 }}>{service.label}</strong>
@@ -534,5 +544,29 @@ function KeyField({ settingKey, label, saved, onSaved }: {
         )}
       </div>
     </div>
+  )
+}
+
+
+/*
+ * The mark on a connection card.
+ *
+ * Twenty cards of identical grey text is hard to scan, so each service wears
+ * its own colour and the icon of whatever it deals in — a film reel for
+ * Letterboxd, headphones for Audible. Not the real logos: those would mean
+ * fetching images from twenty companies, which is both slower and tells each
+ * of them that you use this app.
+ */
+function ServiceMark({ service }: { service: { label: string; brand?: string | null; mediaTypes?: string[] } }) {
+  const type = (service.mediaTypes || [])[0] as MediaType | undefined
+  const icon = type ? SECTION_META[type]?.icon : null
+  const brand = service.brand || 'var(--ink-3)'
+
+  return (
+    <span className="connmark" style={{ ['--brand' as string]: brand }} aria-hidden="true">
+      {icon
+        ? <Icon name={icon} size={17} />
+        : <span className="connmark__letter">{service.label.slice(0, 1)}</span>}
+    </span>
   )
 }

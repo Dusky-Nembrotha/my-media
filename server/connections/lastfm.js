@@ -7,6 +7,7 @@ import { parse as parseLastfm } from '../importers/lastfm.js'
 export const id = 'lastfm'
 export const label = 'Last.fm'
 export const mediaTypes = ['album', 'track']
+export const brand = '#d51007'
 export const kind = 'api-key'
 export const capabilities = ['history']
 export const website = 'https://www.last.fm'

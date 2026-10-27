@@ -8,6 +8,7 @@ import { parse as parseTrakt } from '../importers/trakt.js'
 export const id = 'trakt'
 export const label = 'Trakt'
 export const mediaTypes = ['film', 'tv']
+export const brand = '#ed1c24'
 export const kind = 'oauth-device'
 export const capabilities = ['history', 'ratings', 'watchlist']
 export const website = 'https://trakt.tv'

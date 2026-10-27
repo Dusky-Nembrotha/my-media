@@ -10,6 +10,7 @@ import { parse as parseSpotify } from '../importers/spotify.js'
 export const id = 'spotify'
 export const label = 'Spotify'
 export const mediaTypes = ['album', 'track', 'podcast']
+export const brand = '#1db954'
 export const kind = 'oauth-code'
 export const capabilities = ['history', 'library']
 export const website = 'https://spotify.com'

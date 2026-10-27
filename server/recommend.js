@@ -67,6 +67,39 @@ const PICTURE_BOOK = /picture book|board book|toddler|baby|preschool|early reade
  */
 const TOO_BROAD = /^(fiction|literature|non-fiction|nonfiction|novel|novels|history|biography|english literature|american literature|general)$/i
 
+/*
+ * Open Library subjects that describe a plot, not a taste.
+ *
+ * It tags Northern Lights with "Missing persons", so anything else about a
+ * missing person scored as a match and was offered with that as the reason —
+ * an Enola Holmes mystery recommended off Philip Pullman, explained by a tag
+ * that barely describes either book. These say what happens in a story, which
+ * is no guide at all to whether someone will enjoy another one.
+ *
+ * Audience tags go too. Open Library files Sabriel, Northern Lights and a
+ * board book alike as children's fiction, so "you rate children's fiction
+ * highly" was true of this library and useless as a signal.
+ */
+const PLOT_TAG = new RegExp([
+  'missing persons', 'kidnapping', 'runaways?', 'orphans?', 'friendship', 'revenge',
+  'interpersonal relations', 'man-woman relationships', 'fathers and (?:sons|daughters)',
+  'mothers and (?:sons|daughters)', 'brothers and sisters', 'best friends', 'first loves?',
+  'secrecy', 'conduct of life', 'self-realization', 'coming of age', 'identity',
+  'good and evil', 'courage', 'survival', 'loss \\(psychology\\)', 'grief', 'death',
+  'schools?', 'boarding schools?', 'teenage (?:girls|boys)', 'children', 'families',
+  'juvenile|young adult|children\'s', 'translations into', 'large type', 'reading level',
+  // Cataloguers' notes rather than anything about the book.
+  '^english language$', '^english fiction$', '^american fiction$', '^british fiction$',
+  '^accessible book$', '^in library$', '^open library', '^internet archive',
+  '^paperback', '^hardcover', '^audiobook', '^ebook', '^new york times',
+].join('|'), 'i')
+
+/** Subjects worth neither scoring on nor citing as a reason. */
+function uselessSubject(label) {
+  const g = String(label || '').trim()
+  return !g || TOO_BROAD.test(g) || PLOT_TAG.test(g)
+}
+
 // TMDB keywords that are bookkeeping, not taste: "based on novel or book" is
 // true of half the catalogue, and "You go for alcohol" is not a reason.
 const KEYWORD_NOISE = /based on|stinger|sequel|remake|prequel|woman director|independent film|alcohol|drug|nudity|sex|violence|profanity|^\d{4}s?$|anthology/i
@@ -205,7 +238,7 @@ const SHELVES = [
 function shelfOf(type, genre) {
   if (type !== 'book' && type !== 'audiobook') return String(genre).toLowerCase()
   const g = String(genre)
-  if (TOO_BROAD.test(g)) return null
+  if (uselessSubject(g)) return null
   return SHELVES.find(([, re]) => re.test(g))?.[0] || null
 }
 
@@ -829,7 +862,7 @@ function explain(candidate, profile, contributions, crowdSlot) {
     const label = c.slot.display || c.key.split(':').pop()
     if (c.key.startsWith('genre:')) {
       // "You rate Fiction above your average" is not a reason.
-      if (TOO_BROAD.test(label)) continue
+      if (uselessSubject(label)) continue
       const top = c.slot.support[0]
       bits.push(c.slot.rated >= MIN_SUPPORT
         ? `You rate ${label} above your average${top ? ` (${top.title} ${STAR(top.rating)})` : ''}`
@@ -984,7 +1017,31 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
           because: crowd.model.because(crowd.user, crowdId).map((b) => ({ ...b, title: crowd.titleOf.get(b.item_id) })),
         }
         score += CROWD_WEIGHT * s.score
+
+        /*
+         * The model predicting three stars for someone who averages four is
+         * the model saying "you would not much like this". It still scores
+         * above an unknown title on confidence alone, which is how The
+         * Vampire Diaries arrived at a predicted ★★★. Suggesting something
+         * you are expected to rate below your own average is self-defeating.
+         */
+        const typeMean = profile.meanByType[c.type] ?? profile.globalMean
+        if (s.predicted != null && s.predicted < typeMean - 0.1) score -= 1.2
       }
+    }
+
+    /*
+     * A book nobody has vouched for, matched on nothing but subject tags, is
+     * the weakest thing this engine can produce — and Open Library's tags are
+     * loose enough that it produced plenty. Where a crowd verdict or an author
+     * you return to was available and this has neither, it goes to the back.
+     *
+     * Not excluded outright: for a book too new or too obscure for the ratings
+     * data, subject matching is all there is, and it is better than nothing.
+     */
+    if ((c.type === 'book' || c.type === 'audiobook') && !crowdSlot) {
+      const fromPerson = c.via.some((v) => v.via === 'creator' && v.seed)
+      if (!fromPerson) score -= 0.5
     }
 
     /*
@@ -1026,7 +1083,16 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
     // Already offered recently: still eligible, but it has had its turn.
     if (shownBefore?.has(fpOf(c))) score -= 0.45
 
-    scored.push({ ...c, score, contributions, crowd: crowdSlot, reasons: explain(c, profile, contributions, crowdSlot) })
+    const reasons = explain(c, profile, contributions, crowdSlot)
+
+    /*
+     * If nothing can be said about why this is here, it should not be here.
+     * An unexplained suggestion is indistinguishable from a random one, and
+     * the explanation is the part that makes the list worth trusting.
+     */
+    if (!reasons.length) continue
+
+    scored.push({ ...c, score, contributions, crowd: crowdSlot, reasons })
   }
 
   scored.sort((a, b) => b.score - a.score)

@@ -1156,3 +1156,29 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 
 /* A cover you can open even when the thing is not in your library. */
 .poster__open { display: block; width: 100%; padding: 0; text-align: left; }
+
+/* Each connection wears its service's colour, so twenty cards can be scanned. */
+.connmark {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--brand, var(--ink-3));
+  background: color-mix(in oklab, var(--brand, var(--ink-4)) 16%, transparent);
+  border: 1px solid color-mix(in oklab, var(--brand, var(--ink-4)) 32%, transparent);
+}
+.connmark__letter { font-size: 15px; font-weight: 700; }
+
+/* A hairline of the brand down the leading edge, enough to tell them apart
+   without turning the page into a paint chart. */
+.conncard { position: relative; overflow: hidden; }
+.conncard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--brand, transparent);
+  opacity: 0.85;
+}

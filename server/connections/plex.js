@@ -16,6 +16,7 @@ import { fetchText } from '../lib/fetchv4.js'
 export const id = 'plex'
 export const label = 'Plex'
 export const mediaTypes = ['film', 'tv']
+export const brand = '#e5a00d'
 export const kind = 'oauth-device'
 export const capabilities = ['history', 'ratings']
 export const website = 'https://plex.tv'
@@ -235,6 +236,38 @@ export async function account({ config, tokens }) {
   }
 }
 
+/*
+ * Plex falls back to the filename for anything its own matcher could not
+ * identify, so the history contains entries like
+ * "Mogs.Christmas.2023.1080p.ALL4.WEB-DL.AAC2.0.H.264-NGP". Logging that
+ * verbatim gives a library full of gibberish that no provider can match, so
+ * the release tags are cut off and the dots turned back into spaces.
+ */
+const RELEASE_JUNK = /\b(?:\d{3,4}p|4k|uhd|hdr|web[- .]?dl|web ?rip|blu[- .]?ray|bdrip|dvdrip|hdtv|x26[45]|h\.?26[45]|hevc|xvid|aac\d?(?:\.\d)?|ac3|dts(?:[- .]hd)?|ddp?5\.1|atmos|remux|proper|repack|extended|internal|amzn|nf|dsnp|all4|iplayer)\b/i
+
+function cleanTitle(raw) {
+  let title = String(raw || '').trim()
+  if (!title) return { title: '', year: null }
+
+  // A filename rather than a title: no spaces, but plenty of separators.
+  if (!title.includes(' ') && /[._]/.test(title)) title = title.replace(/[._]+/g, ' ')
+
+  // Everything from the first release tag onwards is packaging, not a title.
+  const words = title.split(/\s+/)
+  const cut = words.findIndex((w) => RELEASE_JUNK.test(w))
+  if (cut > 0) title = words.slice(0, cut).join(' ')
+
+  // A bare year at the end is the release year, not part of the name.
+  let year = null
+  const m = title.match(/\s\(?((?:19|20)\d{2})\)?$/)
+  if (m) {
+    year = Number(m[1])
+    title = title.slice(0, m.index).trim()
+  }
+
+  return { title: title.replace(/[-–\s]+$/, '').trim(), year }
+}
+
 /** Plex stores dates as unix seconds; the diary wants YYYY-MM-DD. */
 function dayOf(viewedAt) {
   if (!viewedAt) return null
@@ -304,12 +337,13 @@ export async function sync({ config, tokens, options = {} }) {
   for (const row of watches) {
     const day = dayOf(row.viewedAt)
     if (row.type === 'movie') {
-      const title = row.title
+      const cleaned = cleanTitle(row.title)
+      const title = cleaned.title
       if (!title) continue
       films.push(record({
         type: 'film',
         title,
-        year: row.year ?? null,
+        year: row.year ?? cleaned.year ?? null,
         consumed_on: day,
         rating: ratings.get(`film|${normaliseTitle(title)}`) ?? null,
         metadata: { source: 'plex', plex_rating_key: row.ratingKey ?? null },
@@ -318,7 +352,7 @@ export async function sync({ config, tokens, options = {} }) {
         external_key: keyFor('plex', 'film', [normaliseTitle(title), day || '']),
       }))
     } else if (row.type === 'episode') {
-      const show = row.grandparentTitle || row.parentTitle
+      const show = cleanTitle(row.grandparentTitle || row.parentTitle).title
       if (!show) continue
       episodeRows.push({
         type: 'tv',
@@ -349,5 +383,7 @@ export async function sync({ config, tokens, options = {} }) {
     }))
   }
 
-  return { records, detail: { watches: watches.length, rated: ratings.size } }
+  // A plain array, like every other connector: the sync route hands whatever
+  // comes back straight to applyRecords, which counts on it being one.
+  return records
 }

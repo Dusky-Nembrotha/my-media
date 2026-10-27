@@ -69,6 +69,15 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="main">
         {/* No header bar: search floats over the page, with room to see through. */}
         <div className="floatbar">
+          {/*
+            * The sidebar carries the name on a desktop, but it is hidden on a
+            * phone, which left nothing at all saying what the app was.
+            */}
+          <Link to="/" className="floatbar__brand only-mobile" aria-label="Shelved — home">
+            <span className="floatbar__mark"><Logo size={19} /></span>
+            <span className="floatbar__name">Shelved</span>
+          </Link>
+
           {enrich && enrich.pending > 0 && (
             <span
               className="fillpill"

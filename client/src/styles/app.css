@@ -134,6 +134,30 @@ kbd {
 }
 .floatbar > * { pointer-events: auto; }
 
+/* The name and mark, for phones where there is no sidebar to carry them. */
+.floatbar__brand {
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  min-width: 0;
+  padding: 4px 2px;
+}
+.floatbar__mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.floatbar__name {
+  font-size: 15.5px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
 .iconbtn {
   width: 34px;
   height: 34px;
@@ -697,6 +721,8 @@ kbd {
   .rail { display: none; }
   .only-desktop { display: none; }
   .only-mobile { display: grid; }
+  /* The brand lays its mark and name out in a row, not a grid. */
+  .floatbar__brand.only-mobile { display: flex; }
 
   .tabbar {
     position: fixed;

@@ -133,10 +133,19 @@ router.post('/connections/:id/poll', async (req, res) => {
       const saved = saveConnection(connector.id, { status: 'error', pending: {}, message: result.message })
       return res.json({ status: 'error', message: result.message, state: publicState(connector, saved) })
     }
-    let account = null
-    try { account = await connector.account({ config: conn.config, tokens: result.tokens }) } catch { /* optional */ }
+    /*
+     * Some connectors learn something during the handshake that has to be
+     * kept — Plex discovers which address its server actually answers on, and
+     * without storing it the connection shows as linked but can reach
+     * nothing. The account lookup needs it too, so it is merged first.
+     */
+    const config = { ...conn.config, ...(result.config || {}) }
+    let account = result.account ?? null
+    if (!account) {
+      try { account = await connector.account({ config, tokens: result.tokens }) } catch { /* optional */ }
+    }
     const saved = saveConnection(connector.id, {
-      status: 'connected', tokens: result.tokens, pending: {}, account, message: null,
+      status: 'connected', config, tokens: result.tokens, pending: {}, account, message: null,
     })
     res.json({ status: 'connected', state: publicState(connector, saved) })
   } catch (err) {
@@ -151,10 +160,19 @@ router.post('/connections/:id/exchange', async (req, res) => {
   const conn = loadConnection(connector.id)
   try {
     const result = await connector.exchange({ config: conn.config, code: req.body?.code })
-    let account = null
-    try { account = await connector.account({ config: conn.config, tokens: result.tokens }) } catch { /* optional */ }
+    /*
+     * Some connectors learn something during the handshake that has to be
+     * kept — Plex discovers which address its server actually answers on, and
+     * without storing it the connection shows as linked but can reach
+     * nothing. The account lookup needs it too, so it is merged first.
+     */
+    const config = { ...conn.config, ...(result.config || {}) }
+    let account = result.account ?? null
+    if (!account) {
+      try { account = await connector.account({ config, tokens: result.tokens }) } catch { /* optional */ }
+    }
     const saved = saveConnection(connector.id, {
-      status: 'connected', tokens: result.tokens, pending: {}, account, message: null,
+      status: 'connected', config, tokens: result.tokens, pending: {}, account, message: null,
     })
     res.json({ status: 'connected', state: publicState(connector, saved) })
   } catch (err) {

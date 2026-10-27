@@ -8,6 +8,7 @@ import { normaliseTitle } from '../lib/util.js'
 export const id = 'steam'
 export const label = 'Steam'
 export const mediaTypes = ['game']
+export const brand = '#66c0f4'
 export const kind = 'api-key'
 export const capabilities = ['history']
 export const website = 'https://store.steampowered.com'
