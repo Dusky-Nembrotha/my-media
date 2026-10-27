@@ -745,6 +745,10 @@ router.get('/hot', async (req, res) => {
    * going on, and a chart that only showed what is going on in one country
    * would be a worse answer to that.
    */
+  // How many of the chart the pageviews had an opinion on, so the page can
+  // name its sources truthfully rather than by assumption.
+  let wikiSignal = 0
+
   const HOME = String(setting('watch_region') || 'GB').toUpperCase()
   const homeLanguages = { GB: 'en', US: 'en', IE: 'en', AU: 'en', CA: 'en', NZ: 'en' }
   const ANGLOPHONE = new Set(['GB', 'US', 'IE', 'AU', 'CA', 'NZ'])
@@ -764,6 +768,26 @@ router.get('/hot', async (req, res) => {
      */
     const byPopularity = [...items].sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
     const popRank = new Map(byPopularity.map((item, i) => [item, i]))
+
+    /*
+     * A third source, from outside TMDB entirely: what the English-speaking
+     * world actually looked up yesterday. Two TMDB charts agreeing with each
+     * other is one opinion stated twice — both are drawn from the same
+     * cataloguing-minded audience. Wikipedia pageviews are everybody.
+     *
+     * Titles outside Wikipedia's top thousand share the mid-point of the
+     * places left over, which is the ordinary way to rank ties: not being
+     * looked up is real information, but it should not pretend to be a
+     * precise placing.
+     */
+    const wikiViews = await wiki.topViews({ days: 2 }).catch(() => new Map())
+    const seenOnWiki = items
+      .map((item) => ({ item, views: wikiViews.get(normaliseTitle(item.title)) ?? 0 }))
+      .filter((x) => x.views > 0)
+      .sort((a, b) => b.views - a.views)
+    const wikiRank = new Map(seenOnWiki.map((x, i) => [x.item, i]))
+    wikiSignal = seenOnWiki.length
+    const wikiTie = (seenOnWiki.length + items.length - 1) / 2
 
     items = items
       .map((item, i) => {
@@ -795,7 +819,18 @@ router.get('/hot', async (req, res) => {
         const age = new Date().getFullYear() - (item.year ?? new Date().getFullYear())
         const evergreen = age > 6 && i > 12 ? Math.min(14, (age - 6) * 0.5) : 0
 
-        return { item, rank: 0.65 * (popRank.get(item) ?? i) + 0.35 * i - lift + evergreen }
+        /*
+         * The three sources, averaged. Popularity and the trending order are
+         * both TMDB's and are weighted as the one opinion they are; the
+         * pageviews carry as much as the pair of them because they are the
+         * only reading here that comes from the public rather than from a
+         * film database's own users.
+         */
+        const rank = 0.34 * (popRank.get(item) ?? i)
+          + 0.26 * i
+          + 0.40 * (wikiRank.get(item) ?? wikiTie)
+
+        return { item, rank: rank - lift + evergreen }
       })
       .sort((a, b) => a.rank - b.rank)
       .map((x) => x.item)
@@ -822,31 +857,9 @@ router.get('/hot', async (req, res) => {
       .map((r) => `${r.type}|${normaliseTitle(r.title)}`),
   )
 
-  const source = (type === 'film' || type === 'tv') ? 'TMDB'
+  const source = (type === 'film' || type === 'tv') ? (wikiSignal ? 'TMDB and Wikipedia' : 'TMDB')
     : (type === 'book' || type === 'audiobook') ? 'Open Library'
       : 'Apple'
-
-  /*
-   * IMDb's score on the card, for screen titles.
-   *
-   * TMDB has its own rating, but it is not the number people mean when they
-   * ask how a film is regarded. IMDb has no free API, so this comes through
-   * OMDb — one lookup per title, which is why it is done only for the batch
-   * being shown and cached for a fortnight afterwards. A missing answer just
-   * leaves the badge off.
-   */
-  const imdb = new Map()
-  if ((type === 'film' || type === 'tv') && omdb.hasKey()) {
-    const BATCH = 5
-    for (let i = 0; i < items.length; i += BATCH) {
-      const slice = items.slice(i, i + BATCH)
-      await Promise.all(slice.map(async (item) => {
-        const found = await omdb.ratings({ title: item.title, year: item.year, type }).catch(() => null)
-        const score = (found?.ratings || []).find((r) => r.source === 'IMDb')
-        if (score) imdb.set(item.title, { rating: score.score, votes: score.votes ?? null })
-      }))
-    }
-  }
 
   /*
    * Other ways to read the chart. "Hot" is the source's own order, which is
@@ -863,6 +876,30 @@ router.get('/hot', async (req, res) => {
   // Page only once everything has been ordered.
   const total = items.length
   items = items.slice(offset, offset + limit)
+
+  /*
+   * IMDb's score on the card, for screen titles.
+   *
+   * TMDB has its own rating, but it is not the number people mean when they
+   * ask how a film is regarded. IMDb has no free API, so this comes through
+   * OMDb — one lookup per title, and strictly for the page being returned.
+   * It used to run over the whole hundred-title pool before paging, which is
+   * eighty lookups nobody asked for and twenty seconds of waiting for them.
+   * Cached for a fortnight; a missing answer just leaves the badge off.
+   */
+  const imdb = new Map()
+  if ((type === 'film' || type === 'tv') && omdb.hasKey()) {
+    const BATCH = 5
+    for (let i = 0; i < items.length; i += BATCH) {
+      const slice = items.slice(i, i + BATCH)
+      await Promise.all(slice.map(async (item) => {
+        const found = await omdb.ratings({ title: item.title, year: item.year, type }).catch(() => null)
+        const score = (found?.ratings || []).find((r) => r.source === 'IMDb')
+        if (score) imdb.set(item.title, { rating: score.score, votes: score.votes ?? null })
+      }))
+    }
+  }
+
 
   res.json({
     type,

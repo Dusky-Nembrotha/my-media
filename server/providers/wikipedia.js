@@ -1,5 +1,5 @@
 import { fetchJson } from '../lib/http.js'
-import { parseYear, splitPeople, uniqueBy } from '../lib/util.js'
+import { normaliseTitle, parseYear, splitPeople, uniqueBy } from '../lib/util.js'
 
 /**
  * Keyless fallback for films (and games, and anything else). Wikipedia hosts
@@ -7,6 +7,7 @@ import { parseYear, splitPeople, uniqueBy } from '../lib/util.js'
  * Wikidata supplies structured director/genre/runtime/ids.
  */
 const WP = 'https://en.wikipedia.org/w/api.php'
+const PAGEVIEWS = 'https://wikimedia.org/api/rest_v1/metrics/pageviews/top'
 const WD = 'https://www.wikidata.org/w/api.php'
 
 const QUALIFIER = {
@@ -220,4 +221,46 @@ export async function person(name, { hint = 'writer' } = {}) {
   } catch {
     return null
   }
+}
+
+/*
+ * What the English-speaking world actually looked up.
+ *
+ * A second opinion on what is hot, and an unusually good one: TMDB's charts
+ * measure interest among people who catalogue films, which skews in ways a
+ * British evening does not. Wikipedia pageviews measure interest among
+ * everyone, and asking the English edition tilts it the right way without
+ * excluding anything — a Japanese show the whole country is talking about
+ * still shows up here.
+ *
+ * One request per day of history for the top thousand articles, so this
+ * costs two calls for the whole chart rather than one per title. Free, and
+ * no key. Yesterday is the most recent complete day.
+ */
+export async function topViews({ days = 2, project = 'en.wikipedia' } = {}) {
+  const views = new Map()
+
+  for (let back = 1; back <= days; back++) {
+    const d = new Date(Date.now() - back * 24 * 60 * 60 * 1000)
+    const y = d.getUTCFullYear()
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(d.getUTCDate()).padStart(2, '0')
+    try {
+      const data = await fetchJson(
+        `${PAGEVIEWS}/${project}/all-access/${y}/${m}/${day}`,
+        { ttlSeconds: 60 * 60 * 12 },
+      )
+      for (const a of data.items?.[0]?.articles || []) {
+        // Wikipedia's own furniture dwarfs every article on the list.
+        if (/^(Main_Page|Special:|Wikipedia:|Portal:|Help:|Category:|Talk:)/.test(a.article)) continue
+        const key = normaliseTitle(cleanTitle(String(a.article).replace(/_/g, ' ')))
+        if (!key) continue
+        views.set(key, (views.get(key) || 0) + (a.views || 0))
+      }
+    } catch {
+      // A day the API has not published yet is not a reason to have no signal.
+    }
+  }
+
+  return views
 }

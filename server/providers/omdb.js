@@ -18,9 +18,23 @@ function url(params) {
 }
 
 /** Ratings for one title, by IMDb id where we have one, else by name and year. */
+/*
+ * OMDb's free tier allows a thousand requests a day, and once it is spent
+ * every further call is a 401 that still costs a round trip — eighteen of
+ * them was six seconds of waiting to be told no eighteen times. One refusal
+ * is enough to know; back off for an hour and let the badges go missing,
+ * which is what they would do anyway.
+ */
+let limitedUntil = 0
+
+export function isRateLimited() {
+  return Date.now() < limitedUntil
+}
+
 export async function ratings({ imdbId, title, year, type }) {
   if (!hasKey()) return null
   if (!imdbId && !title) return null
+  if (isRateLimited()) return null
 
   const params = imdbId
     ? { i: imdbId }
@@ -29,7 +43,13 @@ export async function ratings({ imdbId, title, year, type }) {
   let data
   try {
     data = await fetchJson(url(params), { ttlSeconds: 60 * 60 * 24 * 14 })
-  } catch {
+  } catch (err) {
+    // 401 is both "key is spent" and "key is wrong". Either way, stop asking.
+    if (err?.status === 401) limitedUntil = Date.now() + 60 * 60 * 1000
+    return null
+  }
+  if (data?.Error && /request limit/i.test(data.Error)) {
+    limitedUntil = Date.now() + 60 * 60 * 1000
     return null
   }
   if (!data || data.Response === 'False') return null
