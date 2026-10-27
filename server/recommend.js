@@ -1,7 +1,8 @@
 import { all, get, run, json } from './lib/db.js'
 import { normaliseTitle, decade, uniqueBy, clamp } from './lib/util.js'
 import { systemUserId } from './lib/user.js'
-import { tmdb, itunes, ol, mb, tvmaze, wiki, bookNoise } from './providers/index.js'
+import { tmdb, itunes, ol, mb, tvmaze, wiki, gbooks, bookNoise } from './providers/index.js'
+import { coverUrl } from './providers/openlibrary.js'
 import * as wikidata from './providers/wikidata.js'
 import * as cf from './lib/cf.js'
 
@@ -34,12 +35,41 @@ const QUALITY = {
 }
 
 /*
+ * A stiffer bar for anything the ratings model has never heard of.
+ *
+ * The MovieLens data ends in 2023, so newer films reach the list through the
+ * content path alone, with no crowd verdict to temper them. That let the odd
+ * thin new release through on a six-point-something and a couple of hundred
+ * votes — "The Killer's Game", "Swapped" — sitting incongruously among
+ * Psycho and Akira. Recent titles have to be better regarded to earn a place,
+ * and a film still gathering its first votes simply waits its turn.
+ */
+const DATASET_ENDS = 2023
+const RECENT_QUALITY = {
+  film: { minVotes: 900, minRating: 6.8 },
+  tv: { minVotes: 350, minRating: 7.0 },
+}
+
+/*
  * Subjects that mean "this is for a small child". Open Library returns board
  * books alongside literary fiction for the same subject search, and a
  * recommendation of "Guess How Much I Love You" to someone reading Sanderson
  * is the kind of thing that makes the whole feature look broken.
  */
 const JUVENILE = /juvenile|picture book|board book|children's|toddler|baby|preschool|early reader/i
+// Never, whoever you are: these are for people who cannot read yet.
+const PICTURE_BOOK = /picture book|board book|toddler|baby|preschool|early reader|bedtime|nursery/i
+
+/*
+ * Subjects too broad to search on. "Fiction" sorted by rating is a list of
+ * whatever Open Library's readers rate highest, which is to say the Harry
+ * Potter books, and says nothing about you.
+ */
+const TOO_BROAD = /^(fiction|literature|non-fiction|nonfiction|novel|novels|history|biography|english literature|american literature|general)$/i
+
+// TMDB keywords that are bookkeeping, not taste: "based on novel or book" is
+// true of half the catalogue, and "You go for alcohol" is not a reason.
+const KEYWORD_NOISE = /based on|stinger|sequel|remake|prequel|woman director|independent film|alcohol|drug|nudity|sex|violence|profanity|^\d{4}s?$|anthology/i
 
 /*
  * A reference work is not a reading recommendation, and a subject naming a
@@ -61,6 +91,7 @@ function passesQuality(c, profile) {
      * Project Hail Mary" recommended to them.
      */
     if (bookNoise(c.title)) return false
+    if (/\b(box ?set|boxed set|omnibus|books? \d+\s*[-–]\s*\d+)\b/i.test(c.title)) return false
 
     const subjects = (c.genres || []).map((g) => String(g).trim())
     if (subjects.some((g) => REFERENCE.test(g))) return false
@@ -79,21 +110,55 @@ function passesQuality(c, profile) {
     // Open Library's own rating, already on a 0–10 scale here.
     if (ratings >= 8 && (c.external_rating ?? 10) < 6.4) return false
 
-    const juvenile = (c.genres || []).some((g) => JUVENILE.test(String(g)))
+    if (subjects.some((g) => PICTURE_BOOK.test(g))) return false
+    const juvenile = subjects.some((g) => JUVENILE.test(g))
     if (juvenile) {
-      // Unless you actually read children's books, in which case keep them.
+      /*
+       * Open Library tags Sabriel and "Guess How Much I Love You" alike as
+       * children's fiction, so the tag alone cannot tell a young-adult novel
+       * from a picture book. Length can: nothing under a hundred-odd pages
+       * is a novel. Past that, keep it only if you actually rate children's
+       * books — rated, not merely shelved.
+       */
+      if (c.pages && c.pages < 120) return false
       const readsJuvenile = [...(profile?.attrs?.keys() || [])]
-        .some((k) => k.startsWith('genre:') && JUVENILE.test(k) && (profile.attrs.get(k)?.n ?? 0) >= 3)
+        .some((k) => k.startsWith('genre:') && JUVENILE.test(k) && (profile.attrs.get(k)?.rated ?? 0) >= 3)
       if (!readsJuvenile) return false
     }
     return true
   }
 
-  const bar = QUALITY[c.type]
+  const recent = (c.year ?? 0) > DATASET_ENDS
+  const bar = (recent ? RECENT_QUALITY[c.type] : null) ?? QUALITY[c.type]
   if (!bar) return true
+  /*
+   * MovieLens rates stand-up specials, concert films and shorts alongside
+   * features, and the crowd model is happy to suggest them. They are not what
+   * someone opening a list of film suggestions is after.
+   */
+  if (c.type === 'film') {
+    if (c.runtime && c.runtime < 60) return false
+    if ((c.genres || []).includes('TV Movie')) return false
+    if ((c.metadata?.keywords || []).some((k) => /stand-up|concert film/i.test(String(k)))) return false
+  }
+  /*
+   * Nothing unreleased, and nothing with a year nobody has filled in. TMDB
+   * lists films years ahead of release; "The Mandalorian and Grogu (2026)"
+   * is an announcement, not a suggestion.
+   */
+  const thisYear = new Date().getFullYear()
+  if (!c.year || c.year > thisYear) return false
+
   const votes = c.metadata?.vote_count ?? 0
-  // No vote data at all means it did not come from TMDB; judge it elsewhere.
-  if (!votes && c.external_rating == null) return true
+
+  /*
+   * A TMDB candidate with no votes is unreleased or unwatched, not merely
+   * uncounted — this escape was meant for the keyless providers, which carry
+   * no vote data at all, and it was letting the entire unreleased slate past.
+   */
+  const fromTmdb = Boolean(c.tmdb_id) || c.provider === 'tmdb'
+  if (!votes && c.external_rating == null) return !fromTmdb
+
   if (votes < bar.minVotes) return false
   if ((c.external_rating ?? 0) < bar.minRating) return false
   return true
@@ -109,6 +174,46 @@ const SHRINK = 6
 const CONFIDENCE_K = 8    // confidence = n / (n + K)
 const MIN_SUPPORT = 4     // below this an attribute can explain, but not drive
 const IMPLICIT_WEIGHT = 0.45
+/*
+ * What it means that you logged something and did not rate it.
+ *
+ * It means you chose it. That is weaker than a four-star rating but it is not
+ * nothing, and for most of the books in a library it is the only signal there
+ * is — the audiobooks arrived unrated, and a profile built from ratings alone
+ * had never heard of the nature writing that makes up a third of the shelf.
+ */
+const LOGGED_DEV = 0.3
+
+/*
+ * Open Library subjects are too fine to calibrate a list against: a shelf
+ * that is a third nature writing shows up as "Nature" 5%, "Ecology" 3%,
+ * "Zoology" 3%, "Natural history" 3% and so on, none of them big enough to
+ * count. For books, shares are measured in these broader shelves instead.
+ */
+const SHELVES = [
+  ['fantasy', /\bfantasy\b|\bmagic\b|\bwizards?\b|\bdragons?\b|imaginary (places|wars)|\bquests?\b|good and evil/i],
+  ['science fiction', /science fiction|\bspace\b|extraterrestrial|dystopia|time travel|\brobots?\b/i],
+  ['nature', /\bnature\b|ecolog|zoolog|botan|wildlife|natural history|rewild|conservation|environment|countryside|\bbirds?\b|ornitholog|insects|\bbees\b|bumblebees|gardening|farming|rural life|\blandscapes?\b|\bforests?\b|\bmeadows?\b/i],
+  ['history', /\bhistory\b|historical|\bwars?\b|military|medieval|ancient|\bempire\b/i],
+  ['crime', /\bcrime\b|detective|\bmystery\b|murder|thriller|suspense|\bpolice\b/i],
+  ['biography', /biograph|memoir|autobiograph|diaries|\btravel\b|voyages|description and travel/i],
+  ['children', /children|juvenile|young adult|school stories|coming of age/i],
+  ['science', /\bscience\b|physics|biology|evolution|mathematics|psychology|philosophy|economics|politics|sociology/i],
+  ['myth', /\bmyth|\blegends?\b|folklore|fairy tales|\bgods\b|religion/i],
+]
+
+function shelfOf(type, genre) {
+  if (type !== 'book' && type !== 'audiobook') return String(genre).toLowerCase()
+  const g = String(genre)
+  if (TOO_BROAD.test(g)) return null
+  return SHELVES.find(([, re]) => re.test(g))?.[0] || null
+}
+
+/** The broad shelves a title belongs on, for calibrating the list. */
+export function shelvesOf(c) {
+  const limit = c.type === 'book' || c.type === 'audiobook' ? 6 : 2
+  return [...new Set((c.genres || []).slice(0, limit).map((g) => shelfOf(c.type, g)).filter(Boolean))].slice(0, 2)
+}
 
 function attrsOf(work) {
   const out = []
@@ -119,7 +224,6 @@ function attrsOf(work) {
     if (!c?.name) continue
     // "You like HBO" is not a useful reason to watch something.
     if (c.role === 'Network' || c.role === 'Publisher') continue
-    // Cast members are weak signal compared with the authoring roles.
     out.push({
       key: `creator:${c.role || 'Creator'}|${String(c.name).toLowerCase()}`,
       // Sharing an actor rarely means two films are alike; sharing a director
@@ -150,7 +254,7 @@ function recencyWeight(dateStr) {
  */
 export function buildProfile() {
   const rows = all(`
-    SELECT w.id, w.type, w.title, w.year, w.genres, w.creators, w.language, w.metadata,
+    SELECT w.id, w.type, w.title, w.year, w.genres, w.creators, w.language, w.metadata, w.tmdb_id,
            e.rating, e.liked, e.consumed_on, e.id AS entry_id
     FROM entries e JOIN works w ON w.id = e.work_id
     ORDER BY ifnull(e.consumed_on, e.created_at) DESC`)
@@ -174,6 +278,20 @@ export function buildProfile() {
   const allRated = Object.values(ratedByType).flat()
   const globalMean = allRated.length ? allRated.reduce((a, b) => a + b, 0) / allRated.length : 3.5
 
+  /*
+   * How much a mere log entry is worth, by kind. Where nearly everything is
+   * rated (545 of 569 films) an unrated film is an afterthought; where almost
+   * nothing is (25 of 120 books) choosing is most of the evidence there is,
+   * and the weight of a log entry rises towards that of a rating.
+   */
+  const countByType = {}
+  for (const w of works) countByType[w.type] = (countByType[w.type] || 0) + 1
+  const implicitStrength = {}
+  for (const [type, count] of Object.entries(countByType)) {
+    const ratedShare = (ratedByType[type]?.length || 0) / count
+    implicitStrength[type] = 1 + (1 - ratedShare)
+  }
+
   const attrs = new Map()
   const seen = new Set()
 
@@ -193,14 +311,16 @@ export function buildProfile() {
       dev = 0.5
       weight *= IMPLICIT_WEIGHT
     } else {
-      continue
+      dev = LOGGED_DEV
+      weight *= Math.min(1, IMPLICIT_WEIGHT * (implicitStrength[w.type] || 1))
     }
 
     for (const { key, weight: aw, display } of attrsOf(w)) {
-      const slot = attrs.get(key) || { key, display, sum: 0, weightSum: 0, n: 0, support: [], types: new Set() }
+      const slot = attrs.get(key) || { key, display, sum: 0, weightSum: 0, n: 0, rated: 0, support: [], types: new Set() }
       slot.sum += dev * weight * aw
       slot.weightSum += weight * aw
       slot.n += 1
+      if (w.rating != null) slot.rated += 1
       slot.types.add(w.type)
       const dedupeKey = `${key}|${w.id}`
       if (!seen.has(dedupeKey)) {
@@ -224,22 +344,55 @@ export function buildProfile() {
     .filter((a) => a.key.startsWith(prefix) && a.n >= Math.max(minN, MIN_SUPPORT) && a.score > 0)
     .sort((a, b) => b.score * b.confidence - a.score * a.confidence)
 
+  /*
+   * What the shelf actually looks like, genre by genre: the share of your
+   * films that are horror, of your books that are nature writing. The list
+   * is held to roughly these proportions (see rank), which is what makes it
+   * reflect the library rather than whichever genre you rate highest.
+   */
+  const genreShare = {}
+  for (const w of works) {
+    const shelves = shelvesOf(w)
+    // Only what can be shelved at all counts: a book with no subjects on
+    // record says nothing about the shape of the shelf.
+    if (!shelves.length) continue
+    const slot = (genreShare[w.type] ||= { total: 0, counts: new Map() })
+    slot.total += 1
+    for (const g of shelves) slot.counts.set(g, (slot.counts.get(g) || 0) + 1)
+  }
+
+  const favourites = works
+    .filter((w) => w.rating != null && w.rating >= Math.max(4, (meanByType[w.type] ?? globalMean) + 0.5))
+    .slice(0, 60)
+  const favouriteIds = new Set(favourites.map((w) => w.id))
+
   return {
     attrs,
     globalMean,
     meanByType,
+    genreShare,
+    implicitStrength,
     counts: {
       entries: works.length,
       rated: allRated.length,
       works: new Set(works.map((w) => w.id)).size,
     },
     topCreators: pickTop('creator:', 2).slice(0, 25),
-    topGenres: pickTop('genre:', 2).slice(0, 20),
+    topGenres: pickTop('genre:', 2).slice(0, 40),
     topKeywords: pickTop('keyword:', 2).slice(0, 20),
     topDecades: pickTop('decade:', 3).slice(0, 5),
-    favourites: works
-      .filter((w) => w.rating != null && w.rating >= Math.max(4, (meanByType[w.type] ?? globalMean) + 0.5))
-      .slice(0, 60),
+    favourites,
+    /*
+     * Everything else you have logged, most recent first, minus what you
+     * rated below your average. Favourites seed the search first, but a shelf
+     * of unrated books is a shelf of choices, and with five rated shows the
+     * other nineteen are most of what is known about your taste in TV.
+     */
+    logged: uniqueBy(
+      works.filter((w) => !favouriteIds.has(w.id)
+        && (w.rating == null || w.rating >= (meanByType[w.type] ?? globalMean) - 0.25)),
+      (w) => w.id,
+    ),
     // Music usually arrives unrated: heavy rotation is the only signal there is.
     mostPlayed: works
       .filter((w) => (w.metadata?.play_count || 0) > 0)
@@ -270,33 +423,85 @@ const ROLE_FOR_TYPE = {
   podcast: ['Publisher'],
 }
 
-/**
- * What people who rated your films the way you did went on to rate highly.
+/*
+ * How the crowd's score is put together, in the terms of lib/cf.js.
  *
- * This is the collaborative part, and it is the strongest signal available:
- * it knows nothing about genres or directors, only that thirty thousand people
- * who loved Fargo also loved Goodfellas. Everything else in here is a guess
- * about *why* you might like something; this is evidence that you will.
+ * `quality` is how much "everyone thinks it is good" counts next to "people
+ * with your taste think it is good"; `popularity` is the price of fame,
+ * charged per tenfold increase in raters beyond `familiar`. Set with the
+ * engine's own holdout test: this mix still separates the films you rated
+ * four stars and up from the ones you rated three and down with an AUC of
+ * about 0.9, and brings the list's fame down from the top two hundred films
+ * on MovieLens to the level of the ones you actually watch. The book data is
+ * a tenth the size, so "familiar" is correspondingly smaller there.
  */
-export function crowdScores(type, profile) {
-  if (type !== 'film' && type !== 'tv') return null
-  if (!cf.available()) return null
+const CROWD_MIX = {
+  film: { quality: 0.5, popularity: 0.12, familiar: 4000 },
+  book: { quality: 0.5, popularity: 0.12, familiar: 1500 },
+}
+const mixFor = (type) => CROWD_MIX[type === 'audiobook' ? 'book' : type] || CROWD_MIX.film
 
-  const rated = all(
-    `SELECT w.tmdb_id, max(e.rating) rating
+const authorOf = (creators) => (creators || []).find((c) => c.role === 'Author' || !c.role)?.name
+
+/**
+ * Where you sit in the collaborative-filtering model for this kind of thing,
+ * worked out from what you have rated — and, more weakly, from what you have
+ * merely logged.
+ *
+ * Film and book each have their own model. Nothing for TV: there is no
+ * public TV ratings set, and a show's TMDB id is a different number space
+ * from a film's — a show's id was being read as a film's, which is how one
+ * anime ended up with eighty "neighbours".
+ */
+export function crowdUser(type) {
+  const kind = type === 'audiobook' ? 'book' : type
+  const model = kind === 'film' ? cf.film : kind === 'book' ? cf.books : null
+  if (!model?.available()) return null
+
+  const rows = all(
+    `SELECT w.id, w.title, w.creators, w.tmdb_id, max(e.rating) rating
        FROM works w JOIN entries e ON e.work_id = w.id
-      WHERE w.type = ? AND w.tmdb_id IS NOT NULL AND e.rating IS NOT NULL
-      GROUP BY w.tmdb_id`,
-    type,
+      WHERE w.type = ?
+      GROUP BY w.id`,
+    kind,
   )
+  const rated = rows.filter((r) => r.rating != null)
   if (rated.length < 5) return null
+  const mean = rated.reduce((a, r) => a + r.rating, 0) / rated.length
 
-  const mean = profile.meanByType[type] ?? profile.globalMean
-  const scores = cf.scoreNeighbours(rated, mean)
-  return scores.size ? scores : null
+  const titleOf = new Map()
+  const observations = []
+  for (const r of rows) {
+    const id = kind === 'film'
+      ? Number(r.tmdb_id) || null
+      : model.match(r.title, authorOf(json(r.creators, [])))
+    if (!id) continue
+    titleOf.set(id, r.title)
+    observations.push(r.rating != null
+      ? { id, rating: r.rating }
+      : { id, rating: mean + LOGGED_DEV, weight: IMPLICIT_WEIGHT })
+  }
+  const user = model.foldIn(observations)
+  return user ? { model, user, titleOf, kind } : null
 }
 
-async function candidatesForType(type, profile, { breadth = 1, crowd = null } = {}) {
+/** The model's id for a candidate, if it has one. */
+function crowdIdOf(crowd, c) {
+  if (!crowd) return null
+  if (crowd.kind === 'film') return c.type === 'film' && c.tmdb_id ? Number(c.tmdb_id) : null
+  if (c.type !== 'book' && c.type !== 'audiobook') return null
+  return c.metadata?.crowd_id || crowd.model.match(c.title, authorOf(c.creators))
+}
+
+/** Everything of this type with a TMDB id, rated or not: never suggest it back. */
+function knownTmdbIds(type) {
+  return new Set(
+    all('SELECT DISTINCT tmdb_id FROM works WHERE type = ? AND tmdb_id IS NOT NULL', type)
+      .map((r) => Number(r.tmdb_id)),
+  )
+}
+
+export async function candidatesForType(type, profile, { breadth = 1, crowd = null } = {}) {
   const out = []
   const roles = ROLE_FOR_TYPE[type] || ['Creator']
   const creators = profile.topCreators
@@ -305,35 +510,25 @@ async function candidatesForType(type, profile, { breadth = 1, crowd = null } = 
       return c.types.includes(type) && roles.includes(role) && role !== 'Cast'
     })
     .slice(0, Math.round(6 * breadth))
-  const genres = profile.topGenres.filter((g) => g.types.includes(type)).slice(0, Math.round(4 * breadth))
+  const genres = profile.topGenres
+    .filter((g) => g.types.includes(type))
+    .filter((g) => !TOO_BROAD.test(g.display || '') && !JUVENILE.test(g.key))
+    .slice(0, Math.round((type === 'book' || type === 'audiobook' ? 7 : 4) * breadth))
+
   /*
-   * Seeds. With 44 favourites to draw on, taking ten of them left a pool of
-   * barely a hundred candidates — so the engine was choosing the best of a
-   * near-random handful rather than the best of everything plausible.
+   * Seeds: what you rated highly first, then what you merely chose. With one
+   * five-star show and nothing else above the bar, every TV suggestion used
+   * to trace back to Fargo; the other twenty-three shows in the log are a far
+   * better picture of what you watch.
    */
-  const seedWorks = [
+  const seedWorks = uniqueBy([
     ...profile.favourites.filter((w) => w.type === type),
     ...(profile.mostPlayed || []).filter((w) => w.type === type),
-  ].slice(0, Math.round(24 * breadth))
+    ...profile.logged.filter((w) => w.type === type),
+  ], (w) => w.id).slice(0, Math.round((type === 'tv' ? 30 : 24) * breadth))
 
-  /*
-   * With nothing of this type rated yet there are no favourites, and the
-   * engine used to return an empty list. But a shelf is a choice in itself:
-   * fall back to what you have most recently logged, which is at least
-   * evidence of what you pick up.
-   */
-  const fallback = seedWorks.length === 0
-    ? all(
-      `SELECT w.id, w.type, w.title, w.year, e.rating
-         FROM works w JOIN entries e ON e.work_id = w.id
-        WHERE w.type = ?
-        ORDER BY ifnull(e.consumed_on, e.created_at) DESC
-        LIMIT ?`,
-      type, Math.round(16 * breadth),
-    )
-    : []
+  const seeds = seedWorks
 
-  const seeds = uniqueBy([...seedWorks, ...fallback], (w) => w.id)
   /*
    * Attribution has to be earned, not assumed.
    *
@@ -379,32 +574,16 @@ async function candidatesForType(type, profile, { breadth = 1, crowd = null } = 
   }
 
   // The crowd's picks come first, and carry the most weight.
-  if (crowd && tmdb.hasKey()) {
-    const best = [...crowd.entries()]
-      .sort((a, b) => b[1].score - a[1].score)
-      .slice(0, Math.round(70 * breadth))
+  if (crowd && type === 'film' && tmdb.hasKey()) {
+    const best = crowd.model.rankAll(crowd.user, { ...mixFor(type), limit: Math.round(80 * breadth), exclude: knownTmdbIds(type) })
 
     const BATCH = 4
     for (let i = 0; i < best.length; i += BATCH) {
       const slice = best.slice(i, i + BATCH)
-      const filled = await Promise.all(slice.map(([tmdbId]) => tmdb.detail(type, String(tmdbId)).catch(() => null)))
+      const filled = await Promise.all(slice.map((b) => tmdb.detail(type, String(b.item_id)).catch(() => null)))
       for (let j = 0; j < filled.length; j++) {
         if (!filled[j]) continue
-        const [tmdbId, slot] = slice[j]
-        const seed = slot.from[0]
-          ? get('SELECT id, title, year FROM works WHERE tmdb_id = ? LIMIT 1', String(slot.from[0].tmdb_id))
-          : null
-        out.push({
-          ...filled[j],
-          type,
-          via: [{
-            via: 'crowd',
-            seed: seed ? { ...seed, type, rating: slot.from[0].rating } : null,
-            attrKey: null,
-            label: null,
-            agreed: slot.from.length,
-          }],
-        })
+        out.push({ ...filled[j], type, via: [{ via: 'crowd', seed: null, attrKey: null, label: null }] })
       }
     }
   }
@@ -463,17 +642,50 @@ async function candidatesForType(type, profile, { breadth = 1, crowd = null } = 
 
   if (type === 'book' || type === 'audiobook') {
     /*
+     * What people who read what you read went on to rate highly. These come
+     * with a title, an author and an ISBN and nothing else; the final picks
+     * are filled in from Open Library afterwards.
+     */
+    if (crowd) {
+      const best = crowd.model.rankAll(crowd.user, { ...mixFor(type), limit: Math.round(60 * breadth) })
+      for (const b of best) {
+        const t = crowd.model.describe(b.item_id)
+        if (!t) continue
+        const isbn = t.isbn13 || t.isbn || null
+        out.push({
+          provider: 'goodbooks',
+          type,
+          title: String(t.title).replace(/\s*\([^)]*\)\s*$/, ''),
+          year: t.year,
+          creators: String(t.authors || '').split(',').slice(0, 1).map((name) => ({ role: 'Author', name: name.trim() })).filter((c) => c.name),
+          // Readers' own shelf names ("fantasy", "nature", "non-fiction"),
+          // which is what a genre is.
+          genres: String(t.tags || '').split(',').filter(Boolean).map((tag) => tag.replace(/-/g, ' ')),
+          isbn,
+          poster_url: isbn ? coverUrl(isbn, 'L', 'isbn') : null,
+          metadata: { crowd_id: b.item_id, ratings_count: b.n },
+          via: [{ via: 'crowd', seed: null, attrKey: null, label: null }],
+        })
+      }
+    }
+
+    /*
      * Authors you rate highly are the strongest book signal by a distance —
      * Open Library's subjects are a jumble ("Fiction", "History", "Histoire"),
      * and with only a couple of dozen books rated, an attribute threshold
      * built for six hundred films admits almost no authors at all.
      *
      * So the authors of individual books you thought were good count as seeds
-     * in their own right, the same way one well-played album seeds music.
+     * in their own right, the same way one well-played album seeds music —
+     * and after them, the authors you have gone back to, and the authors of
+     * the books you simply read.
      */
+    const returnedTo = [...profile.attrs.values()]
+      .filter((a) => a.key.startsWith('creator:Author|') && a.types.includes(type) && a.n >= 2 && a.score > 0)
+      .sort((a, b) => b.score * b.confidence - a.score * a.confidence)
     const seedAuthors = uniqueBy(
       [
-        ...creators.map((c) => ({
+        ...[...creators, ...returnedTo].map((c) => ({
           name: c.display || parseCreatorKey(c.key).name,
           support: c.support[0],
           key: c.key,
@@ -487,20 +699,28 @@ async function candidatesForType(type, profile, { breadth = 1, crowd = null } = 
         }).filter(Boolean),
       ],
       (a) => String(a.name).toLowerCase(),
-    ).slice(0, Math.round(16 * breadth))
+    ).slice(0, Math.round(24 * breadth))
 
     for (const a of seedAuthors) {
       const meta = a.metadata
         || (a.support ? json(get('SELECT metadata FROM works WHERE id = ?', a.support.id)?.metadata, {}) : {})
-      const authorKey = (meta.author_keys || [])[0]
-      const byAuthor = authorKey
-        ? await ol.byAuthorKey(authorKey, { limit: 20, type })
-        : await ol.search(a.name, { limit: 14, type, author: a.name })
+      /*
+       * Google Books describes one edition, so its categories and authors
+       * are steadier than Open Library's merged works; it leads when a key
+       * is set, and Open Library fills in whenever it has nothing to say.
+       */
+      let byAuthor = gbooks.hasKey() ? await gbooks.byAuthor(a.name, { limit: 16, type }).catch(() => []) : []
+      if (!byAuthor.length) {
+        const authorKey = (meta.author_keys || [])[0]
+        byAuthor = authorKey
+          ? await ol.byAuthorKey(authorKey, { limit: 20, type })
+          : await ol.search(a.name, { limit: 14, type, author: a.name })
+      }
       push(byAuthor, 'creator', a.support, a.key, a.name, 'Author')
       if (type === 'audiobook') push(await itunes.search('audiobook', a.name, 8), 'creator', a.support, a.key, a.name, 'Author')
     }
 
-    for (const g of genres.slice(0, 6)) {
+    for (const g of genres.slice(0, 7)) {
       push(await ol.bySubject(g.display || g.key.replace('genre:', ''), { limit: 20, type }), 'genre', g.support[0], g.key, g.display)
     }
   }
@@ -566,6 +786,7 @@ function candidateAttrs(c) {
 }
 
 const STAR = (n) => (n == null ? '' : '★'.repeat(Math.floor(n)) + (n % 1 ? '½' : ''))
+const roundHalf = (n) => Math.round(n * 2) / 2
 
 function explain(candidate, profile, contributions, crowdSlot) {
   const bits = []
@@ -574,25 +795,20 @@ function explain(candidate, profile, contributions, crowdSlot) {
 
   /*
    * The crowd's reason is the most convincing one there is, so it leads:
-   * naming the films of yours that the agreement rests on makes it checkable
-   * rather than something you have to take on faith.
+   * naming the films of yours it rests on makes it checkable rather than
+   * something you have to take on faith. The stars are the model's prediction
+   * of what you would give it, which is a claim you can hold it to.
    */
-  if (crowdSlot && crowdSlot.score > 0) {
-    const named = crowdSlot.from
-      .slice(0, 2)
-      .map((f) => get('SELECT title FROM works WHERE tmdb_id = ? LIMIT 1', String(f.tmdb_id))?.title)
-      .filter(Boolean)
+  if (crowdSlot?.because?.length) {
+    const named = crowdSlot.because.map((b) => b.title).filter(Boolean).slice(0, 2)
+    const stars = STAR(clamp(roundHalf(crowdSlot.predicted), 0.5, 5))
     if (named.length) {
-      const others = crowdSlot.from.length - named.length
-      bits.push(
-        `Loved by people who rate ${named.join(' and ')}`
-        + `${others > 0 ? ` and ${others} more of yours` : ''} as you do`,
-      )
+      bits.push(`People who share your taste in ${named.join(' and ')} rate this highly — predicted ${stars} for you`)
     }
   }
 
   if (similarVia) {
-    bits.push(`Similar to ${similarVia.seed.title}${similarVia.seed.rating ? ` (${STAR(similarVia.seed.rating)})` : ''}`)
+    bits.push(`Similar to ${similarVia.seed.title}${similarVia.seed.rating ? ` (${STAR(similarVia.seed.rating)})` : ', which you logged'}`)
   }
   if (creatorVia) {
     const slot = creatorVia.attrKey ? profile.attrs.get(creatorVia.attrKey) : null
@@ -600,7 +816,7 @@ function explain(candidate, profile, contributions, crowdSlot) {
       || parseCreatorKey(creatorVia.attrKey || 'creator:Creator|').name
     const seed = creatorVia.seed
     bits.push(seed
-      ? `More from ${name} — you gave ${seed.title} ${STAR(seed.rating) || 'a high rating'}`
+      ? `More from ${name} — you ${seed.rating ? `gave ${seed.title} ${STAR(seed.rating)}` : `read ${seed.title}`}`
       : `More from ${name}`)
   }
   for (const c of contributions.slice(0, 6)) {
@@ -612,11 +828,16 @@ function explain(candidate, profile, contributions, crowdSlot) {
     if (c.key.startsWith('decade:') && contributions.some((x) => x !== c && x.contribution > 0 && !x.key.startsWith('decade:'))) continue
     const label = c.slot.display || c.key.split(':').pop()
     if (c.key.startsWith('genre:')) {
+      // "You rate Fiction above your average" is not a reason.
+      if (TOO_BROAD.test(label)) continue
       const top = c.slot.support[0]
-      bits.push(`You rate ${label} above your average${top ? ` (${top.title} ${STAR(top.rating)})` : ''}`)
+      bits.push(c.slot.rated >= MIN_SUPPORT
+        ? `You rate ${label} above your average${top ? ` (${top.title} ${STAR(top.rating)})` : ''}`
+        : `You keep picking ${label}${top ? ` (${top.title})` : ''}`)
     } else if (c.key.startsWith('creator:')) {
       bits.push(`You like ${label}`)
     } else if (c.key.startsWith('keyword:')) {
+      if (KEYWORD_NOISE.test(label)) continue
       bits.push(`You go for ${label}`)
     } else if (c.key.startsWith('decade:')) {
       bits.push(`${label} is a sweet spot for you`)
@@ -638,6 +859,52 @@ function excluded() {
 }
 
 const fpOf = (c) => c.fingerprint || `${c.type}|${normaliseTitle(c.title)}`
+
+/*
+ * How far the crowd's view moves a score. Its score is on the scale of a star
+ * deviation (a lift of 0.5 means "half a star more than most people"), and the
+ * taste profile's contributions add up to a few tenths; this keeps the crowd
+ * in charge of film while leaving the profile room to reorder.
+ */
+const CROWD_WEIGHT = 1.6
+
+/*
+ * Diversity. The old penalties were too small to matter — a twentieth of a
+ * point per repeated genre, nothing at all for two picks resting on the same
+ * film of yours — so a list could be ten crime films that all traced back to
+ * Fargo. These are large enough to bite.
+ */
+const DIVERSITY = {
+  creator: 0.45,      // per earlier pick by the same person
+  calibration: 0.3,   // per pick a shelf would be over (or is still under) its share of the list
+  seed: 0.2,          // per earlier pick explained by the same title of yours
+}
+
+/**
+ * How far adding a title would push its shelves over, or leave them under,
+ * their share of the list (Steck 2018, in whole picks): positive when a shelf
+ * would then hold more of the list than it does of the library, negative
+ * when it is still owed picks. A shelf that is a quarter of the library is
+ * owed three of twelve, and the third nature book costs nothing while the
+ * seventh fantasy novel costs the whole surplus.
+ */
+export function miscalibration(shelf, shelves, listCounts, listTotal) {
+  if (!shelf?.total || !shelves.length) return 0
+  let drift = 0
+  for (const key of shelves) {
+    const expected = ((shelf.counts.get(key) || 0) / shelf.total) * (listTotal + 1)
+    drift += (listCounts.get(key) || 0) + 1 - expected
+  }
+  return drift / shelves.length
+}
+
+/** The titles of yours a pick is standing on, for the "same seed" penalty. */
+function seedsOf(c) {
+  const ids = new Set()
+  for (const v of c.via) if (v.seed?.id) ids.add(`w${v.seed.id}`)
+  for (const b of c.crowd?.because || []) ids.add(`c${b.item_id}`)
+  return [...ids]
+}
 
 /** Score, explain and diversify. */
 export function rank(candidates, profile, { limit = 12, shortlistOnly = false, crowd = null, shownBefore = null } = {}) {
@@ -662,47 +929,76 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
 
   const scored = []
   for (const c of merged.values()) {
-    let score = 0
     const contributions = []
     for (const { key, weight } of candidateAttrs(c)) {
       const slot = profile.attrs.get(key)
       if (!slot) continue
       const kind = key.split(':')[0]
-      // A genre learnt from your TV ratings should nudge, not drive, a book pick.
-      const crossMedia = slot.types.includes(c.type) ? 1 : 0.4
+      /*
+       * A genre learnt from your TV ratings should nudge, not drive, a book
+       * pick. Film and TV are close enough cousins that a film taste for
+       * dark comedy is most of what is known about your TV taste.
+       */
+      const sameFamily = (a, b) => (a === 'film' && b === 'tv') || (a === 'tv' && b === 'film')
+      const crossMedia = slot.types.includes(c.type) ? 1
+        : slot.types.some((t) => sameFamily(t, c.type)) ? 0.7 : 0.4
       // Thin evidence can colour a recommendation but must not choose it.
       const support = slot.n >= MIN_SUPPORT ? 1 : 0.25
       const contribution = slot.score * slot.confidence * (KIND_WEIGHT[kind] ?? 0.4)
         * weight * crossMedia * support
-      score += contribution
       contributions.push({ key, slot, contribution })
+    }
+    contributions.sort((a, b) => b.contribution - a.contribution)
+
+    /*
+     * Only the strongest few of each kind count. Open Library tags one
+     * fantasy novel "Magic", "Fantasy fiction", "Fiction, fantasy, epic" and
+     * "Imaginary places" at once, and letting every tag add up meant a book
+     * with five names for the same thing beat one with a single sharp match.
+     */
+    let score = 0
+    const counted = {}
+    for (const c of contributions) {
+      const kind = c.key.split(':')[0]
+      counted[kind] = (counted[kind] || 0) + 1
+      if (c.contribution > 0 && counted[kind] > 3) continue
+      score += c.contribution
     }
 
     /*
      * What the crowd thinks. This is evidence rather than inference, so it
      * carries more weight than anything else here — but it only applies to
-     * film and TV, and only to titles well enough known to appear in the
-     * ratings data, so the rest of the scoring still has to stand on its own.
+     * films the model knows, so the rest of the scoring still has to stand on
+     * its own for everything else.
      */
     let crowdSlot = null
-    if (crowd && c.tmdb_id) {
-      crowdSlot = crowd.get(Number(c.tmdb_id)) || null
-      if (crowdSlot) score += 1.25 * crowdSlot.score
+    const crowdId = crowdIdOf(crowd, c)
+    // Another edition of something you have already read: "Mistborn" is
+    // "Mistborn: The Final Empire", and the model knows it.
+    if (crowdId && crowd.user.rated.has(crowdId)) continue
+    if (crowdId) {
+      const s = crowd.model.score(crowd.user, crowdId, mixFor(c.type))
+      if (s) {
+        crowdSlot = {
+          ...s,
+          because: crowd.model.because(crowd.user, crowdId).map((b) => ({ ...b, title: crowd.titleOf.get(b.item_id) })),
+        }
+        score += CROWD_WEIGHT * s.score
+      }
     }
 
     /*
      * Provenance: being adjacent to something you loved is evidence, but one
      * such link is weak evidence — every film has a hundred neighbours. What
      * counts is *how many* of your favourites point at the same title, so the
-     * bonus grows with the square root of that count and saturates.
-     *
-     * This used to be a flat 0.35 per link, which came to ~0.5 for a single
-     * neighbour and buried the taste profile underneath it.
+     * bonus grows with the square root of that count and saturates. A link
+     * from something you logged but did not rate is worth a little.
      */
     const mean = profile.meanByType[c.type] ?? profile.globalMean
-    const links = c.via.filter((v) => (v.via === 'similar' || v.via === 'creator') && v.seed?.rating)
+    const links = c.via.filter((v) => (v.via === 'similar' || v.via === 'creator') && v.seed)
     if (links.length) {
-      const lift = links.reduce((a, v) => a + Math.max(0, v.seed.rating - mean), 0) / links.length
+      const unratedLift = 0.15 * (profile.implicitStrength?.[c.type] || 1)
+      const lift = links.reduce((a, v) => a + (v.seed.rating != null ? Math.max(0, v.seed.rating - mean) : unratedLift), 0) / links.length
       const breadth = Math.sqrt(links.length)
       score += 0.16 * breadth * (0.5 + lift)
     }
@@ -711,8 +1007,7 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
      * Quality prior. Deliberately firm: you rate 545 films at 3.6 on average,
      * so you watch well-regarded things, and a suggestion that is merely
      * adjacent to your taste but widely thought poor is a bad suggestion.
-     */
-    /*
+     *
      * Only a rating with some weight behind it counts. A 10/10 from a handful
      * of Open Library users was enough to float a Spanish dictionary to the
      * top of the book suggestions.
@@ -720,6 +1015,9 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
     const backing = c.metadata?.vote_count ?? c.metadata?.ratings_count ?? 0
     const trusted = c.type === 'book' || c.type === 'audiobook' ? backing >= 8 : true
     if (c.external_rating != null && trusted) score += 0.55 * (c.external_rating / 10 - 0.66)
+    // An author's one-off that nobody has catalogued or rated is their
+    // least likely book to be the one you want next.
+    if ((c.type === 'book' || c.type === 'audiobook') && backing < 3 && (c.popularity ?? 0) < 3) score -= 0.15
     const votes = c.metadata?.vote_count ?? 0
     if (votes) score += 0.08 * Math.min(2.2, Math.log10(1 + votes) - 2)
     if (c.popularity) score += 0.04 * Math.min(2, Math.log10(1 + c.popularity))
@@ -728,41 +1026,56 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
     // Already offered recently: still eligible, but it has had its turn.
     if (shownBefore?.has(fpOf(c))) score -= 0.45
 
-    contributions.sort((a, b) => b.contribution - a.contribution)
     scored.push({ ...c, score, contributions, crowd: crowdSlot, reasons: explain(c, profile, contributions, crowdSlot) })
   }
 
   scored.sort((a, b) => b.score - a.score)
   if (shortlistOnly) return scored
 
-  // Diversify: do not hand back six films by one director.
+  /*
+   * Diversify. Greedy: each round takes the best remaining candidate after
+   * charging it for what the list already has — the same director, the same
+   * title of yours doing the explaining — and for how far adding it would
+   * pull the list's mix of shelves away from the library's own. That last
+   * one is a calibration rather than a flat penalty, and it works both ways:
+   * a shelf that is a fifth horror should get a list that is about a fifth
+   * horror, however highly crime is rated — and a shelf that is a fifth
+   * nature writing, none of it rated, should still see some nature writing,
+   * which no rating-driven score would ever put there.
+   *
+   * Subtracted, not multiplied: a score can be negative (anything shown on a
+   * recent refresh is pushed below zero on purpose), and multiplying a
+   * negative number by a penalty makes it *bigger*.
+   */
   const picked = []
   const creatorCount = new Map()
   const genreCount = new Map()
-  const pool = scored.slice(0, Math.max(limit * 8, 80))
+  const seedCount = new Map()
+  /*
+   * Deep enough that calibration can reach the things the score alone
+   * buries: an unrated nature book sits two hundred places down a list
+   * ranked by ratings, and the whole point of the lift above is to go and
+   * get it.
+   */
+  const pool = scored.slice(0, Math.max(limit * 25, 400))
+  const shelf = profile.genreShare?.[pool[0]?.type] || profile.genreShare?.[Object.keys(profile.genreShare || {})[0]]
 
   while (picked.length < limit && pool.length) {
     let bestIdx = -1
     let bestScore = -Infinity
     for (let i = 0; i < pool.length; i++) {
       const c = pool[i]
-      /*
-       * Subtracted, not multiplied.
-       *
-       * A score can be negative — anything shown on a recent refresh is pushed
-       * below zero on purpose — and multiplying a negative number by a penalty
-       * makes it *bigger*. So the rule meant to stop one author taking the
-       * list was promoting them instead, which is how four Discworld novels
-       * arrived in a row.
-       */
       let penalty = 0
       for (const cr of c.creators || []) {
+        if (cr.role === 'Cast') continue
         const n = creatorCount.get(String(cr.name).toLowerCase()) || 0
-        if (n) penalty += 0.45 * n
+        if (n) penalty += DIVERSITY.creator * n
       }
-      for (const g of (c.genres || []).slice(0, 3)) {
-        const n = genreCount.get(String(g).toLowerCase()) || 0
-        if (n >= 2) penalty += 0.05
+      // Something with no shelf neither helps nor hurts the mix.
+      penalty += DIVERSITY.calibration * miscalibration(shelf, shelvesOf(c), genreCount, picked.length)
+      for (const s of seedsOf(c)) {
+        const n = seedCount.get(s) || 0
+        if (n) penalty += DIVERSITY.seed * n
       }
       const adjusted = c.score - penalty
       if (adjusted > bestScore) { bestScore = adjusted; bestIdx = i }
@@ -771,13 +1084,12 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
     const [chosen] = pool.splice(bestIdx, 1)
     picked.push({ ...chosen, adjustedScore: bestScore })
     for (const cr of chosen.creators || []) {
+      if (cr.role === 'Cast') continue
       const k = String(cr.name).toLowerCase()
       creatorCount.set(k, (creatorCount.get(k) || 0) + 1)
     }
-    for (const g of (chosen.genres || []).slice(0, 3)) {
-      const k = String(g).toLowerCase()
-      genreCount.set(k, (genreCount.get(k) || 0) + 1)
-    }
+    for (const k of shelvesOf(chosen)) genreCount.set(k, (genreCount.get(k) || 0) + 1)
+    for (const s of seedsOf(chosen)) seedCount.set(s, (seedCount.get(s) || 0) + 1)
   }
 
   return picked
@@ -814,6 +1126,26 @@ async function hydrateDetails(type, shortlist) {
     out.push(...filled)
   }
   return out
+}
+
+/**
+ * Fill in the crowd's book picks from Open Library: a cover, subjects, the
+ * first line. Only the final list, one lookup each, cached for a week.
+ */
+async function hydrateBooks(picks) {
+  for (const p of picks) {
+    if (p.provider !== 'goodbooks' || !p.isbn) continue
+    const found = await ol.byIsbn(p.isbn, p.type).catch(() => null)
+      || (gbooks.hasKey() ? await gbooks.byIsbn(p.isbn, p.type).catch(() => null) : null)
+    if (!found) continue
+    p.olid = found.olid || p.olid
+    p.poster_url = found.poster_url || p.poster_url
+    p.overview = p.overview || found.overview
+    p.pages = p.pages ?? found.pages
+    if (found.genres?.length) p.genres = found.genres
+    p.external_rating = found.external_rating ?? p.external_rating
+  }
+  return picks
 }
 
 /** Put artwork on the final shortlist (one batched request for Wikidata picks). */
@@ -867,8 +1199,8 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
   }
 
   const profile = buildProfile()
-  const ratedOfType = (profile.meanByType[type] != null)
-  if (!ratedOfType && !profile.counts.rated) {
+  const anythingOfType = profile.favourites.some((w) => w.type === type) || profile.logged.some((w) => w.type === type)
+  if (!anythingOfType && !profile.counts.rated) {
     return { type, fingerprint, picks: [], profileThin: true, cached: false }
   }
 
@@ -889,7 +1221,7 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
   }
 
   // Worked out once and used twice: to find candidates, and to score them.
-  const crowd = crowdScores(type, profile)
+  const crowd = crowdUser(type)
   const raw = await candidatesForType(type, profile, { breadth, crowd })
 
   // Noise removal before anything else: an obscure badly-reviewed title is not
@@ -908,11 +1240,15 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
    * So: score cheaply, take a shortlist, fetch the full record for those, and
    * score again properly. The detail responses are cached for a month, so this
    * is mostly free on the second run.
+   *
+   * The shortlist is itself chosen with the diversity rules, not by raw score:
+   * the point of calibrating the list to the shelf is to reach the things a
+   * rating-driven score buries two hundred places down, and a shortlist of
+   * the seventy highest scores would never contain them.
    */
-  const shortlist = rank(candidates, profile, { shortlistOnly: true, crowd, shownBefore })
-    .slice(0, Math.max(limit * 6, 70))
+  const shortlist = rank(candidates, profile, { limit: Math.max(limit * 5, 60), crowd, shownBefore })
   const detailed = await hydrateDetails(type, shortlist)
-  const picks = await hydrateArtwork(rank(detailed, profile, { limit, crowd, shownBefore }))
+  const picks = await hydrateArtwork(await hydrateBooks(rank(detailed, profile, { limit, crowd, shownBefore })))
 
   const payload = {
     type,
@@ -921,7 +1257,8 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
     candidateCount: candidates.length,
     usingTmdb: tmdb.hasKey(),
     usingCrowd: Boolean(crowd),
-    crowdSize: crowd ? crowd.size : 0,
+    // How many of your own ratings the crowd model could place you by.
+    crowdSize: crowd ? crowd.user.n : 0,
     picks: picks.map((p) => ({
       type: p.type,
       title: p.title,
@@ -932,6 +1269,7 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
       poster_url: p.poster_url || null,
       backdrop_url: p.backdrop_url || null,
       external_rating: p.external_rating ?? null,
+      predicted: p.crowd ? Math.round(clamp(p.crowd.predicted, 0.5, 5) * 10) / 10 : null,
       score: Math.round(p.score * 1000) / 1000,
       reasons: p.reasons,
       fingerprint: p.fingerprint,

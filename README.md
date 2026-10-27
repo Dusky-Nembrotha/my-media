@@ -225,37 +225,51 @@ actions. `Esc` closes any dialog.
 
 ## Suggestions, and the data behind them
 
-Suggestions combine two things.
+Suggestions combine three things.
 
 **What you rate.** Genres, directors, writers, keywords and decades, each
 scored by how far above or below your own average you rate things carrying it,
 shrunk towards zero where the evidence is thin. This is inference: a guess
-about *why* you might like something.
+about *why* you might like something. What you merely log counts too, more
+weakly — and where almost nothing is rated, as with a shelf of audiobooks,
+choosing is most of the evidence there is.
 
-**What people like you rate.** Item-to-item collaborative filtering built from
-the [MovieLens](https://grouplens.org/datasets/movielens/) dataset — 32 million
+**What people like you rate.** A matrix-factorisation model learnt from the
+[MovieLens](https://grouplens.org/datasets/movielens/) dataset — 32 million
 ratings from 200,000 people, published by GroupLens at the University of
-Minnesota for precisely this purpose. For each film you have rated, it works
-out which other films are rated the same way by the same people. This is
-evidence rather than inference, so it carries the most weight.
+Minnesota for precisely this purpose — and, for books, from
+[goodbooks-10k](https://github.com/zygmuntz/goodbooks-10k), six million
+Goodreads ratings of the ten thousand most-read books (CC BY-SA 4.0). Every
+title gets a short vector describing what kind of people like it; your own
+vector is solved from your ratings at request time, so the model is built once
+and never needs rebuilding because your library changed. The model separates
+"widely thought good" from "people with your taste like it more than most",
+and fame is charged for explicitly, which is what stops the suggestions being
+the IMDb Top 250 minus what you have seen. Each pick names the titles of yours
+it rests on and the rating the model predicts you would give it.
+
+**What your shelf looks like.** The list is calibrated to the library's own
+mix: a shelf that is a quarter nature writing, none of it rated, still gets a
+quarter nature writing, however highly the fantasy is rated.
 
 Nothing is scraped, and nothing about your library leaves the machine: the
-dataset is downloaded once and the model is built locally.
+datasets are downloaded once and the models are built locally.
 
 ### Building it
 
 ```sh
-node scripts/fetch-movielens.js      # ~230 MB download, kept as two CSVs
-node scripts/build-cf-model.js       # a couple of minutes; writes data/cf.db
+node scripts/fetch-movielens.js                      # ~230 MB download, kept as two CSVs
+node scripts/build-cf-model.js                       # ~10 minutes on a Pi; writes data/cf.db
+node scripts/fetch-goodbooks.js                      # ~25 MB download
+node scripts/build-cf-model.js --source goodbooks    # ~2 minutes; writes data/cf-books.db
+node scripts/eval-recommender.js                     # how well the model predicts your own ratings
 ```
 
-Re-run the second one every so often as you rate more — the model is built
-around the films you have rated, so it sharpens as your library grows. The app
-works without it; suggestions simply fall back to the content matching.
+The app works without either model; suggestions simply fall back to the
+content matching. The datasets are snapshots, so they know nothing about the
+last year or two of releases. Those still come through TMDB and Open Library
+and are judged on genre, people and keywords — the engines cover each other's
+gaps.
 
-The dataset is a snapshot, so it knows nothing about the last year or two of
-releases. Those still come through TMDB and are judged on genre, people and
-keywords — the two engines cover each other's gaps.
-
-Books and music have no equivalent model yet; their suggestions come from the
-authors and artists you rate highly, and from subject matching.
+Music has no equivalent model; its suggestions come from the artists you rate
+highly and play most, and from tag matching.

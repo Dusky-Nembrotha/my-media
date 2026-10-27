@@ -182,10 +182,10 @@ export function ConnectionsPage() {
               <LiveCard key={s.id} service={s} onChange={reload} />
             ))}
             {(filter === 'all' || filter === 'files') && group.files.map((s) => (
-              <OtherCard key={s.id} service={s} />
+              <OtherCard key={s.id} service={s} onSaved={reload} />
             ))}
             {(filter === 'all' || filter === 'metadata') && group.meta.map((s) => (
-              <OtherCard key={s.id} service={s} />
+              <OtherCard key={s.id} service={s} onSaved={reload} />
             ))}
           </div>
         </section>
@@ -197,7 +197,12 @@ export function ConnectionsPage() {
 function LiveCard({ service, onChange }: { service: LiveService; onChange: () => void }) {
   const { toast, refresh } = useApp()
   const s = service.state
-  const [open, setOpen] = useState(s.status !== 'connected' && !s.hasCredentials)
+  /*
+   * Setup starts closed, always. A dozen services each unfolding their own
+   * form and five numbered steps made the page a wall of text you had to
+   * scroll past to find the one you wanted.
+   */
+  const [open, setOpen] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
   const [pending, setPending] = useState<any>(null)
   const [pasteCode, setPasteCode] = useState('')
@@ -402,7 +407,7 @@ function LiveCard({ service, onChange }: { service: LiveService; onChange: () =>
   )
 }
 
-function OtherCard({ service }: { service: OtherService }) {
+function OtherCard({ service, onSaved }: { service: OtherService; onSaved: () => void }) {
   const [open, setOpen] = useState(false)
   const isMetadata = service.kind.startsWith('metadata')
   const imported = (service.history?.entries ?? 0) > 0
@@ -416,7 +421,7 @@ function OtherCard({ service }: { service: OtherService }) {
           </div>
           {isMetadata && (
             <span className="u-xs u-mut">
-              {service.settingKey ? (service.connected ? 'Key saved' : 'Optional — add a key in Settings') : 'Always on'}
+              {service.settingKey ? (service.connected ? 'Key saved' : 'Optional — needs a free key') : 'Always on'}
             </span>
           )}
           {!isMetadata && imported && <ImportedLine history={service.history} />}
@@ -439,7 +444,9 @@ function OtherCard({ service }: { service: OtherService }) {
           </button>
         ) : null}
         {service.settingKey && (
-          <Link className="btn btn--sm" to="/settings"><Icon name="key" size={13} /> Add key</Link>
+          <button className="btn btn--sm" onClick={() => setOpen((v) => !v)}>
+            <Icon name="key" size={13} /> {service.connected ? 'Change key' : 'Add key'}
+          </button>
         )}
         {service.kind === 'file' && (
           <Link className="btn btn--sm" to="/import"><Icon name="import" size={13} /> Import</Link>
@@ -449,11 +456,83 @@ function OtherCard({ service }: { service: OtherService }) {
         </a>
       </div>
 
-      {open && service.instructions?.length ? (
+      {open && (service.instructions?.length || service.settingKey) ? (
         <div className="connsetup">
-          <Steps steps={service.instructions} />
+          {service.instructions?.length ? <Steps steps={service.instructions} /> : null}
+          {service.settingKey && (
+            <KeyField
+              settingKey={service.settingKey}
+              label={service.label}
+              saved={Boolean(service.connected)}
+              onSaved={onSaved}
+            />
+          )}
         </div>
       ) : null}
     </article>
+  )
+}
+
+
+/**
+ * The box you paste an API key into.
+ *
+ * These used to live on the Settings page, a screen away from the service
+ * they belong to and from the steps telling you how to get one. Keeping the
+ * key beside its own instructions means the whole job is in one place.
+ */
+function KeyField({ settingKey, label, saved, onSaved }: {
+  settingKey: string
+  label: string
+  saved: boolean
+  onSaved: () => void
+}) {
+  const { toast } = useApp()
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function store(next: string, message: string) {
+    setBusy(true)
+    try {
+      await api.put('/settings', { [settingKey]: next })
+      toast(message)
+      setValue('')
+      onSaved()
+    } catch (err) { toast((err as Error).message, 'error') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="field" style={{ marginTop: 12 }}>
+      <label htmlFor={`key-${settingKey}`}>{label} key</label>
+      <div className="u-row u-wrap" style={{ gap: 8 }}>
+        <input
+          id={`key-${settingKey}`}
+          className="input"
+          style={{ minWidth: 180 }}
+          placeholder={saved ? 'A key is stored — paste a new one to replace it' : 'Paste your key'}
+          value={value}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <button
+          className="btn btn--sm btn--primary"
+          disabled={!value.trim() || busy}
+          onClick={() => store(value.trim(), `${label} key saved`)}
+        >
+          Save
+        </button>
+        {saved && (
+          <button
+            className="btn btn--sm btn--ghost"
+            disabled={busy}
+            onClick={() => store(' ', `${label} key removed`)}
+          >
+            <Icon name="trash" size={13} /> Remove
+          </button>
+        )}
+      </div>
+    </div>
   )
 }

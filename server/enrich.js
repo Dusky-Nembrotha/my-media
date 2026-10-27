@@ -129,17 +129,25 @@ async function enrichWork(id) {
     state.lastTitle = work.title
   }
 
-  const found = await enrich(force
-    ? { type: work.type, title: work.title, year: work.year }
-    : {
-      type: work.type,
-      title: work.title,
-      year: work.year,
-      creators: work.creators,
+  /*
+   * A forced refresh means "this match is wrong, look again". What is wrong is
+   * the record it latched onto, so the provider ids go — but the author stays.
+   *
+   * Dropping the author too turned a refresh into a search on the title alone,
+   * which is how "The Blade Itself" by Joe Abercrombie became "The Blade
+   * Itself" by Marcus Sakey. The author is the part we are most sure of.
+   */
+  const found = await enrich({
+    type: work.type,
+    title: work.title,
+    year: work.year,
+    creators: work.creators,
+    ...(force ? {} : {
       isbn: work.isbn,
       imdb_id: work.imdb_id,
       tmdb_id: work.tmdb_id,
-    })
+    }),
+  })
 
   // Only stamp enriched_at on success: a throttled lookup must stay retryable.
   const attempts = (work.metadata?.enrich_attempts || 0) + 1

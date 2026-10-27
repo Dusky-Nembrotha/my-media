@@ -9,6 +9,8 @@ import { api } from '../lib/api'
 import { coverColours } from '../lib/coverColour'
 import { artworkUrl } from '../lib/img'
 import { ArtworkPicker } from '../components/ArtworkPicker'
+import { Preview } from '../components/Preview'
+import type { PreviewTarget } from '../components/Preview'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtDate, fmtRuntime, relDate, statusLabel } from '../lib/format'
 import type { Entry, Work, WorkCard } from '../lib/types'
@@ -190,7 +192,7 @@ export function WorkPage() {
         <div className="workbody__main">
           {work.overview && <Synopsis text={work.overview} />}
 
-          <SeriesRow workId={work.id} onTitles={setInSeries} />
+          <SeriesRow work={work} onTitles={setInSeries} />
 
           {/* Whatever the series row already showed has no business appearing
               again two rows further down. */}
@@ -416,7 +418,8 @@ function buildLinks(work: Work) {
   if (work.metadata?.audible_url) out.push({ label: 'Audible', href: work.metadata.audible_url })
   if (work.metadata?.itunes_url) out.push({ label: 'Apple', href: work.metadata.itunes_url })
   if (work.metadata?.wikipedia) out.push({ label: 'Wikipedia', href: work.metadata.wikipedia })
-  if (work.isbn && !out.length) out.push({ label: 'Open Library', href: `https://openlibrary.org/isbn/${work.isbn}` })
+  // Not Open Library: the ratings strip above already links there, and two
+  // buttons to the same page is just clutter.
   return out.slice(0, 3)
 }
 
@@ -558,29 +561,59 @@ interface SeriesPart {
  * added where they stand, which is the whole point — finding the second Dune
  * film should not mean going back to search and typing it out.
  */
-function SeriesRow({ workId, onTitles }: { workId: number; onTitles: (ids: Set<number>) => void }) {
+function SeriesRow({ work, onTitles }: { work: Work; onTitles: (ids: Set<number>) => void }) {
+  const workId = work.id
   const { toast, refresh } = useApp()
   const { data } = useFetch<{ name: string | null; parts: SeriesPart[] }>(`/works/${workId}/series`, [workId])
 
-  // Tell the page which of its own titles this row has covered.
+  /*
+   * Tell the page which of its own titles this row has covered.
+   *
+   * Keyed on a plain string rather than on the fetched object: handing back a
+   * fresh Set on every render set state on every render, and the page spun in
+   * a re-render loop busy enough that taps on these very cards never landed.
+   */
+  const shownKey = (data?.parts ?? [])
+    .filter((p) => p.work_id)
+    .map((p) => p.work_id)
+    .sort((a, b) => (a as number) - (b as number))
+    .join(',')
+
   useEffect(() => {
-    const shown = (data?.parts ?? []).filter((p) => p.work_id).map((p) => p.work_id as number)
-    onTitles(new Set((data?.name && shown.length > 1) ? shown : []))
-  }, [data])
+    const ids = shownKey ? shownKey.split(',').map(Number) : []
+    onTitles(new Set(data?.name && ids.length > 1 ? ids : []))
+  }, [shownKey, data?.name])
   const [added, setAdded] = useState<Record<string, true>>({})
   const [busy, setBusy] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PreviewTarget | null>(null)
 
   const parts = data?.parts ?? []
   if (!data?.name || parts.length < 2) return null
 
+  /*
+   * Marking the rest of a series as done.
+   *
+   * People read a series in a run, so the date of the book you are looking at
+   * is very nearly always the right date for the one beside it — far closer
+   * than today's, and much quicker than setting each by hand. It is still an
+   * ordinary entry, so it can be edited afterwards like any other.
+   */
+  const inherited = work.entries?.[0]?.consumed_on ?? null
+
   async function add(part: SeriesPart) {
     setBusy(part.title)
     try {
-      await api.post('/recs', {
-        type: part.type, title: part.title, year: part.year,
-        creators: part.creators, poster_url: part.poster_url,
+      await api.post('/log', {
+        work: {
+          type: part.type, title: part.title, year: part.year,
+          creators: part.creators, poster_url: part.poster_url,
+        },
+        consumed_on: inherited,
+        status: 'completed',
+        format: part.type === 'book' ? 'book' : null,
       })
-      toast(`${part.title} added to ${SECTION_META[part.type].planned.toLowerCase()}`)
+      const when = inherited ? ` (${fmtDate(inherited)}, same as ${work.title})` : ''
+      toast(`${SECTION_META[part.type].verb} ${part.title}${when}`)
       setAdded((a) => ({ ...a, [part.title]: true }))
       void refresh()
     } catch (err) { toast((err as Error).message, 'error') }
@@ -588,6 +621,8 @@ function SeriesRow({ workId, onTitles }: { workId: number; onTitles: (ids: Set<n
   }
 
   return (
+    <>
+    {preview && <Preview target={preview} onClose={() => setPreview(null)} />}
     <Row title={`More in ${data.name}`} subtitle={`${parts.length} in the series`} cardWidth={140}>
       {parts.map((part) => {
         const meta = SECTION_META[part.type]
@@ -619,18 +654,33 @@ function SeriesRow({ workId, onTitles }: { workId: number; onTitles: (ids: Set<n
         }
         return (
           <div key={part.title} className="poster">
-            <PosterArt src={part.poster_url} title={part.title} type={part.type} aspect={meta.aspect} />
+            {/* Not yours yet, but still worth being able to look at. */}
+            <button
+              type="button"
+              className="poster__open"
+              onClick={() => setPreview({
+                type: part.type,
+                title: part.title,
+                year: part.year,
+                creator: part.creators?.[0]?.name ?? null,
+                consumedOn: inherited,
+              })}
+              title={`What is ${part.title}?`}
+            >
+              <PosterArt src={part.poster_url} title={part.title} type={part.type} aspect={meta.aspect} />
+            </button>
             <div className="poster__meta">
               <div className="poster__title">{label}</div>
               {added[part.title] ? (
-                <div className="poster__sub u-trunc">On your list</div>
+                <div className="poster__sub u-trunc">{meta.done}</div>
               ) : (
                 <button
                   className="linkish u-xs"
                   disabled={busy === part.title}
                   onClick={() => add(part)}
+                  title={inherited ? `Mark as ${meta.verb.toLowerCase()} on ${fmtDate(inherited)}, the same day as ${work.title}` : undefined}
                 >
-                  + {meta.planned}
+                  + {meta.verb}
                 </button>
               )}
             </div>
@@ -638,6 +688,7 @@ function SeriesRow({ workId, onTitles }: { workId: number; onTitles: (ids: Set<n
         )
       })}
     </Row>
+    </>
   )
 }
 

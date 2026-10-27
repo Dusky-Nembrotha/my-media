@@ -84,7 +84,7 @@ export function Suggestions({ type }: { type: MediaType }) {
           {loading
             ? 'Working out what you would like…'
             : `${picks.length} from ${data?.candidateCount ?? 0} candidates`
-              + `${data?.usingCrowd ? ` · ${(data.crowdSize ?? 0).toLocaleString('en-GB')} rated by people like you` : ''}`
+              + `${data?.usingCrowd ? ` · placed by ${(data.crowdSize ?? 0).toLocaleString('en-GB')} of your ratings` : ''}`
               + `${data?.usingTmdb ? ' · TMDB' : ' · keyless sources'}`
               + `${data?.cached ? ' · cached' : ''}`}
         </span>

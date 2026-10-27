@@ -1,4 +1,5 @@
 import { fetchJson } from '../lib/http.js'
+import { plainText } from '../lib/util.js'
 
 // Keyless. Great for books: covers, subjects, author graph, ratings.
 const BASE = 'https://openlibrary.org'
@@ -31,8 +32,9 @@ function englishEdition(doc) {
 
 const firstOf = (v) => (Array.isArray(v) ? v[0] : v) || null
 
-export function coverUrl(coverId, size = 'L') {
-  return coverId ? `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg` : null
+/** A cover by Open Library cover id, or by ISBN when that is all there is. */
+export function coverUrl(id, size = 'L', key = 'id') {
+  return id ? `https://covers.openlibrary.org/b/${key}/${id}-${size}.jpg` : null
 }
 
 // Open Library subjects are a jumble: "genre:fantasy", "nyt:bestseller",
@@ -84,7 +86,7 @@ function normalise(doc, type = 'book') {
     year: doc.first_publish_year || null,
     creators: (doc.author_name || []).slice(0, 4).map((name) => ({ role: 'Author', name })),
     genres: cleanSubjects(doc.subject).slice(0, 12),
-    overview: (isEnglish ? firstOf(edition.first_sentence) : null) || workSentence,
+    overview: plainText((isEnglish ? firstOf(edition.first_sentence) : null) || workSentence),
     pages: doc.number_of_pages_median || edition?.number_of_pages || null,
     // An English edition's cover, where one came back; the work's otherwise.
     poster_url: coverUrl((isEnglish && edition.cover_i) || doc.cover_i, 'L'),
@@ -164,7 +166,8 @@ export async function workDetail(olid) {
   try {
     const data = await fetchJson(`${BASE}/works/${olid}.json`)
     const desc = typeof data.description === 'string' ? data.description : data.description?.value
-    return { overview: desc || null, subjects: data.subjects || [] }
+    // Publishers supply these with markup in them.
+    return { overview: plainText(desc), subjects: data.subjects || [] }
   } catch {
     return null
   }

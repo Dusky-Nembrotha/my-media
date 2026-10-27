@@ -249,13 +249,17 @@ export function LogDialog() {
     }
   }
 
+  /*
+   * The confirm button just confirms. What you are doing is already settled
+   * by the Watched/Want-to switch above and shown throughout the sheet, so
+   * repeating it on the button only made it long and oddly worded in some
+   * libraries ("Listened to it").
+   */
   const submitLabel = saving
     ? 'Saving…'
     : !target
       ? 'Pick something first'
-      : mode === 'want'
-        ? 'Add to my list'
-        : `${meta.verb} it`
+      : 'OK'
 
   return (
     <Modal

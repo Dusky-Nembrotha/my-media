@@ -120,6 +120,21 @@ export const METADATA = [
     ],
     settingKey: 'omdb_api_key',
   },
+  {
+    id: 'googlebooks', label: 'Google Books', mediaTypes: ['book'], kind: 'metadata-key',
+    website: 'https://books.google.com',
+    blurb: 'Steadier book details than Open Library: one published edition rather than every edition '
+      + 'in every language at once, so titles, authors, page counts and synopses are the publisher\'s own. '
+      + 'Open Library stays on for cover art, which it has far more of.',
+    instructions: [
+      'Create a project at console.cloud.google.com/projectcreate.',
+      'Enable the Books API: console.cloud.google.com/apis/library/books.googleapis.com.',
+      'Make a key at console.cloud.google.com/apis/credentials → Create credentials → API key.',
+      'Optionally restrict the key to the Books API, then paste it into Settings here.',
+      'The free allowance is 1,000 lookups a day, and results are cached for weeks.',
+    ],
+    settingKey: 'google_books_api_key',
+  },
   { id: 'openlibrary', label: 'Open Library', mediaTypes: ['book'], kind: 'metadata-free', website: 'https://openlibrary.org', blurb: 'Covers, authors, subjects and ratings for books. No key needed; already in use.' },
   { id: 'itunes', label: 'Apple', mediaTypes: ['album', 'audiobook', 'podcast'], kind: 'metadata-free', website: 'https://music.apple.com', blurb: 'Artwork and metadata for music, audiobooks and podcasts. No key needed; already in use.' },
   { id: 'musicbrainz', label: 'MusicBrainz', mediaTypes: ['album'], kind: 'metadata-free', website: 'https://musicbrainz.org', blurb: 'Release data and genre tags, with cover art from the Cover Art Archive. No key needed.' },

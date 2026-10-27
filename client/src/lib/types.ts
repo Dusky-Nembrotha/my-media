@@ -110,6 +110,8 @@ export interface Pick {
   poster_url: string | null
   backdrop_url: string | null
   external_rating: number | null
+  /** The crowd model's guess at what you would give it, in stars. */
+  predicted?: number | null
   score: number
   reasons: string[]
   fingerprint: string

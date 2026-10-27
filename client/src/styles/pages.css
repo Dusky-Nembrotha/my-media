@@ -671,14 +671,16 @@ code {
   gap: 10px;
   padding: 16px;
   border-radius: var(--r-md);
-  background: var(--surface-1);
+  /* Nearly opaque: these cards carry API keys, URLs and numbered steps, and
+     the page background was showing straight through the small print. */
+  background: var(--surface-solid);
   border: 1px solid var(--hairline);
   transition: border-color var(--fast), background var(--fast);
 }
 .conncard:hover { border-color: var(--hairline-strong); }
 .conncard.is-connected {
   border-color: color-mix(in oklab, var(--good) 34%, transparent);
-  background: color-mix(in oklab, var(--good) 5%, var(--surface-1));
+  background: color-mix(in oklab, var(--good) 7%, var(--surface-solid));
 }
 .conncard__head { display: flex; align-items: flex-start; gap: 10px; }
 .conndot {
@@ -1151,3 +1153,6 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
   overflow: hidden;
 }
 .synopsis.is-open { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+
+/* A cover you can open even when the thing is not in your library. */
+.poster__open { display: block; width: 100%; padding: 0; text-align: left; }

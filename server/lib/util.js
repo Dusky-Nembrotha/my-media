@@ -32,6 +32,15 @@ export function normaliseTitle(title) {
     .replace(/\s*[:\-–—]\s*(the\s+)?(complete|extended|special|director'?s|unrated|remastered|deluxe)\b.*$/i, '')
     .replace(/\s*\((19|20)\d{2}\)\s*$/, '')
     .replace(/\s*\[[^\]]*\]\s*/g, ' ')
+    /*
+     * A trailing series note is the publisher's, not part of the title.
+     * "Gardens of the Moon" and "Gardens of the Moon : (Malazan Book of the
+     * Fallen 1)" are one book, and treating them as two put the same novel in
+     * the library twice — once in the series row and again under "more like
+     * this". Only parentheses that look like a series reference are stripped,
+     * so "Dawn of the Nugget" and the like are left alone.
+     */
+    .replace(/\s*[:,-]?\s*\((?=[^)]*(?:\d|\bbook\b|\bvol\b|\bseries\b|#))[^)]*\)\s*$/i, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     // A leading article is an edition's whim, not part of the title: Open
@@ -201,4 +210,36 @@ export function canonicalGenres(list) {
     out.push(g)
   }
   return out
+}
+
+
+/**
+ * Plain text from a description that may carry markup.
+ *
+ * Open Library stores descriptions as publishers supply them, which often
+ * means HTML — "<b>'Delightfully twisted'</b><br /><br />" and so on. Those
+ * tags were being rendered as literal text in the synopsis.
+ *
+ * Paragraph breaks are kept as blank lines, because a synopsis without them
+ * is a wall.
+ */
+export function plainText(value) {
+  if (!value) return null
+  const text = String(value)
+    // Block-level markup becomes a line break before the tags are stripped.
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    // The handful of entities that actually turn up.
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return text || null
 }

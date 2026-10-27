@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes, bookNoise, tmdb, ol, itunes, mb, wiki, wikidata, omdb } from '../providers/index.js'
+import { searchProviders, searchAllTypes, bookNoise, enrich, tmdb, ol, itunes, mb, wiki, wikidata, omdb } from '../providers/index.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -512,7 +512,14 @@ router.get('/works/:id/ratings', async (req, res) => {
         scale: 10,
         display: work.external_rating.toFixed(1),
         votes: work.metadata?.ratings_count ?? null,
-        url: work.olid ? `https://openlibrary.org${work.olid}` : null,
+        /*
+         * The id is stored with its "/works/" prefix stripped, so it has to go
+         * back on — otherwise this produced openlibrary.orgOL17373843W, which
+         * goes nowhere.
+         */
+        url: work.olid
+          ? `https://openlibrary.org/works/${String(work.olid).replace(/^\/?(works\/)?/, '')}`
+          : (work.isbn ? `https://openlibrary.org/isbn/${work.isbn}` : null),
       })
     }
     // Goodreads retired its API in 2020, so the best we can honestly offer is
@@ -624,16 +631,31 @@ router.get('/works/:id/series', async (req, res) => {
    * next to the same books with covers elsewhere on the page looks broken.
    */
   const owned = new Map(
-    all(`SELECT w.id, w.type, w.title, w.poster_url,
+    all(`SELECT w.id, w.type, w.title, w.creators, w.poster_url,
                 (SELECT max(e.rating) FROM entries e WHERE e.work_id = w.id) rating,
                 (SELECT count(*) FROM entries e WHERE e.work_id = w.id) entry_count,
                 (SELECT max(e.liked) FROM entries e WHERE e.work_id = w.id) liked
            FROM works w`)
-      .map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w]),
+      .map((w) => [`${w.type}|${normaliseTitle(w.title)}`, { ...w, creators: json(w.creators, []) }]),
   )
 
+  /*
+   * A title on its own is not an identity. Joe Abercrombie wrote "The
+   * Heroes"; Stephen Fry wrote "Heroes" — and matching on title alone put
+   * Fry's book into Abercrombie's series. Where both sides name someone, they
+   * have to agree before this counts as the same book.
+   */
+  const sameHand = (mine, part) => {
+    const a = (mine.creators || []).map((c) => String(c.name).toLowerCase())
+    const b = (part.creators || []).map((c) => String(c.name).toLowerCase())
+    if (!a.length || !b.length) return true
+    return a.some((x) => b.some((y) => x === y
+      || x.split(/\s+/).pop() === y.split(/\s+/).pop()))
+  }
+
   const resolved = parts.map((p) => {
-    const mine = owned.get(`${p.type}|${normaliseTitle(p.title)}`)
+    const candidate = owned.get(`${p.type}|${normaliseTitle(p.title)}`)
+    const mine = candidate && sameHand(candidate, p) ? candidate : null
     return {
       ...p,
       poster_url: mine?.poster_url || p.poster_url || null,
@@ -738,6 +760,66 @@ router.get('/hot', async (req, res) => {
         onList: onList.has(key),
       }
     }),
+  })
+})
+
+/**
+ * Look something up without adding it.
+ *
+ * Everything shown that is *not* in your library — the rest of a series, a
+ * chart entry, a suggestion — is otherwise a dead end: a cover and a title
+ * and no way to find out what it is. This answers "what is this, then?" from
+ * the metadata providers, so the decision to add it is an informed one.
+ */
+router.get('/preview', async (req, res) => {
+  const type = TYPES.includes(req.query.type) ? req.query.type : 'film'
+  const title = String(req.query.title || '').trim()
+  if (!title) return res.status(400).json({ error: 'A title is needed' })
+
+  const creator = String(req.query.creator || '').trim()
+  const year = Number(req.query.year) || null
+  const seed = {
+    type,
+    title,
+    year,
+    creators: creator ? [{ role: type === 'book' ? 'Author' : 'Director', name: creator }] : [],
+  }
+
+  let found = null
+  try {
+    found = await enrich(seed)
+  } catch {
+    found = null
+  }
+
+  // Already yours? Then say so and point at it rather than showing a stranger.
+  const mine = get(
+    'SELECT id FROM works WHERE type = ? AND lower(title) = ? LIMIT 1',
+    type, title.toLowerCase(),
+  )
+
+  res.json({
+    found: Boolean(found),
+    work_id: mine?.id ?? null,
+    preview: {
+      type,
+      title: found?.title || title,
+      year: found?.year ?? year,
+      creators: (found?.creators || seed.creators).filter((c) => c.role !== 'Cast').slice(0, 4),
+      cast: (found?.creators || []).filter((c) => c.role === 'Cast').slice(0, 6).map((c) => c.name),
+      genres: (found?.genres || []).slice(0, 6),
+      overview: found?.overview || null,
+      poster_url: found?.poster_url || null,
+      runtime: found?.runtime ?? null,
+      pages: found?.pages ?? null,
+      language: found?.language ?? null,
+      external_rating: found?.external_rating ?? null,
+      release_date: found?.release_date ?? null,
+      provider: found?.provider ?? null,
+      tmdb_id: found?.tmdb_id ?? null,
+      isbn: found?.isbn ?? null,
+      olid: found?.olid ?? null,
+    },
   })
 })
 

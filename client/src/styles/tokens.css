@@ -13,6 +13,9 @@
   --surface-2: rgba(255, 255, 255, 0.065);
   --surface-3: rgba(255, 255, 255, 0.1);
   --glass: rgba(16, 15, 19, 0.78);
+  /* An almost-solid card, for places where text has to stay readable over
+     the background image rather than merely look like it floats. */
+  --surface-solid: rgba(24, 23, 28, 0.93);
   --hairline: rgba(255, 255, 255, 0.085);
   --hairline-strong: rgba(255, 255, 255, 0.15);
 
@@ -98,6 +101,7 @@
   --canvas-2: #fffefc;
   --surface-1: rgba(14, 16, 22, 0.035);
   --surface-2: rgba(14, 16, 22, 0.06);
+  --surface-solid: rgba(255, 255, 255, 0.94);
   --surface-3: rgba(14, 16, 22, 0.09);
   --glass: rgba(255, 254, 252, 0.8);
   --hairline: rgba(14, 16, 22, 0.1);

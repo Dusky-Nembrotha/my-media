@@ -7,9 +7,10 @@ import * as tvmaze from './tvmaze.js'
 import * as wiki from './wikipedia.js'
 import * as wikidata from './wikidata.js'
 import * as omdb from './omdb.js'
+import * as gbooks from './googlebooks.js'
 import { normaliseTitle, uniqueBy } from '../lib/util.js'
 
-export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb }
+export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks }
 
 const fp = (c) => `${c.type}|${normaliseTitle(c.title)}|${c.year || ''}`
 
@@ -265,6 +266,25 @@ export async function enrich(seed) {
   }
 
   if (type === 'book' || type === 'audiobook') {
+    /*
+     * Google Books first, where a key is set.
+     *
+     * Open Library describes a work — every edition in every language at once
+     * — so its title, author and description belong to whichever edition
+     * sorted first. Google describes one published volume, which is why it
+     * does not hand back Turkish covers for English novels or credit a
+     * foreword writer as the author. Its cover art is poorer though, so Open
+     * Library is still asked afterwards to fill the gaps.
+     */
+    if (gbooks.hasKey()) {
+      const byIsbn = seed.isbn ? await gbooks.byIsbn(seed.isbn, type) : null
+      const author = (seed.creators || []).find((c) => c.role === 'Author' || !c.role)?.name
+      const best = byIsbn && chooseBest([byIsbn], seed)
+        ? byIsbn
+        : chooseBest(await gbooks.search(seed.title, { limit: 8, author, type }), seed)
+      if (best) return await withBookCover(best, seed)
+    }
+
     if (seed.isbn) {
       // Open Library's ISBN index is occasionally wrong, so an ISBN hit still
       // has to look like the book we asked for.
@@ -304,6 +324,18 @@ export async function enrich(seed) {
   }
 
   return null
+}
+
+/**
+ * Google's cover art is thin — often a small scan or nothing at all — while
+ * Open Library has thousands of them. So a Google match keeps its own title,
+ * author and description, and borrows a cover if it lacks a decent one.
+ */
+async function withBookCover(hit, seed) {
+  if (hit.poster_url && !/zoom=5|no_cover/i.test(hit.poster_url)) return hit
+  const author = hit.creators?.[0]?.name || (seed.creators || [])[0]?.name
+  const covers = await ol.editionCovers(hit.title, author, 4).catch(() => [])
+  return covers[0]?.url ? { ...hit, poster_url: covers[0].url } : hit
 }
 
 async function withBookDetail(hit) {

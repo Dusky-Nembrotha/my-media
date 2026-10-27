@@ -18,7 +18,7 @@ router.put('/settings', (req, res) => {
   const before = getSettings()
   const patch = { ...req.body }
   // Blank or masked values mean "leave the stored key alone".
-  for (const key of ['tmdb_api_key', 'omdb_api_key', 'anthropic_api_key']) {
+  for (const key of ['tmdb_api_key', 'omdb_api_key', 'google_books_api_key', 'anthropic_api_key']) {
     if (patch[key] === undefined) continue
     if (patch[key] === '' || String(patch[key]).startsWith('•')) delete patch[key]
   }
