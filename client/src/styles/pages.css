@@ -1292,3 +1292,26 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 .seasonpill.is-on { border-color: var(--accent-line); background: var(--accent-soft); }
 .seasonpill.is-on .seasonpill__tick { background: var(--accent); border-color: var(--accent); color: #fff; }
 .palette__sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--hairline); }
+
+/* One line per log entry, on a work page: every viewing reachable, not just
+   the newest. The whole row is the control — a date and a rating are small
+   targets and there is nothing else on the line to hit by mistake. */
+.logrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  font: inherit;
+  color: var(--ink-2);
+  border: 1px solid transparent;
+  transition: background var(--fast), border-color var(--fast), color var(--fast);
+}
+.logrow:hover { background: var(--surface-2); border-color: var(--hairline); color: var(--ink); }
+.logrow__when { flex: 0 0 auto; font-size: 12.5px; }
+.logrow__what { flex: 1 1 auto; min-width: 0; font-size: 11.5px; color: var(--ink-4); }
+.logrow__rating { flex: 0 0 auto; font-size: 11.5px; color: var(--star); }
+.logrow__edit { flex: 0 0 auto; opacity: 0; color: var(--ink-4); }
+.logrow:hover .logrow__edit, .logrow:focus-visible .logrow__edit { opacity: 1; }

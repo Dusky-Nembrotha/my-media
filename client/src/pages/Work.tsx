@@ -57,6 +57,14 @@ export function WorkPage() {
   const relatedElsewhere = related.filter((w) => !inSeries.has(w.id))
   const meta = SECTION_META[work.type]
   const latest = work.entries[0]
+  /*
+   * How many distinct series were logged. An import writes a row per season,
+   * which is useful history but reads as repeat viewings unless it is said
+   * out loud that it is not.
+   */
+  const loggedSeasons = new Set(
+    work.entries.map((e) => e.season).filter((s): s is number => s != null),
+  ).size
   const cast = work.creators.filter((c) => c.role === 'Cast')
   const makers = work.creators.filter((c) => c.role !== 'Cast')
   const links = buildLinks(work)
@@ -166,7 +174,7 @@ export function WorkPage() {
                   <span className="u-row u-xs u-mut" style={{ gap: 7 }}>
                     <span>
                       {meta.verb} {latest.consumed_on ? fmtDate(latest.consumed_on) : 'at some point'}
-                      {work.entries.length > 1 ? ` · ${work.entries.length} times` : ''}
+                      {work.entries.length > 1 ? ` · ${work.entries.length} log entries` : ''}
                     </span>
                     <button className="linkish" onClick={() => setEditing(latest)}>edit</button>
                   </span>
@@ -210,6 +218,46 @@ export function WorkPage() {
         </div>
 
         <aside className="workbody__side">
+          {/*
+            * Every log entry, not only the newest.
+            *
+            * The page used to show "4 times" and offer an edit link for the
+            * most recent one alone, which left the other three unreachable —
+            * no way to correct a date, a rating, or to delete a row an import
+            * got wrong. A diary you cannot amend is not much of a diary.
+            */}
+          {work.entries.length > 1 && (
+            <div className="card">
+              <div className="u-caps" style={{ marginBottom: 10 }}>
+                {work.type === 'tv' ? 'Watch history' : 'Your log'}
+              </div>
+              <div className="u-col" style={{ gap: 2 }}>
+                {work.entries.map((e) => (
+                  <button key={e.id} type="button" className="logrow" onClick={() => setEditing(e)}>
+                    <span className="logrow__when u-tnum">
+                      {e.consumed_on ? fmtDate(e.consumed_on) : 'no date'}
+                    </span>
+                    <span className="logrow__what u-trunc">
+                      {e.season != null ? `Series ${e.season}` : ''}
+                      {e.season != null && e.episode != null ? ' · ' : ''}
+                      {e.episode != null ? `Episode ${e.episode}` : ''}
+                      {e.is_repeat ? (e.season != null || e.episode != null ? ' · again' : 'Again') : ''}
+                      {e.season == null && e.episode == null && !e.is_repeat ? (e.status === 'completed' ? '' : e.status) : ''}
+                    </span>
+                    {e.rating != null && <span className="logrow__rating u-tnum">{e.rating}★</span>}
+                    <Icon name="pencil" size={12} className="logrow__edit" />
+                  </button>
+                ))}
+              </div>
+              <p className="u-xs u-mut" style={{ margin: '9px 0 0' }}>
+                {loggedSeasons > 1
+                  ? `${loggedSeasons} series logged separately — one watch-through, not ${loggedSeasons} of them. `
+                  : ''}
+                Tap any line to change its date or rating, or to remove it.
+              </p>
+            </div>
+          )}
+
           <WhereToWatch workId={work.id} type={work.type} />
           {work.type === 'tv' && <Seasons workId={work.id} onChanged={reload} />}
           <div className="card">
@@ -555,6 +603,7 @@ interface SeriesPart {
   creators: { role?: string; name: string }[]
   rating?: number | null
   entry_count?: number
+  repeat_count?: number
   liked?: boolean
   work_id: number | null
   inLibrary: boolean
@@ -635,7 +684,7 @@ function SeriesRow({ work, onTitles }: { work: Work; onTitles: (ids: Set<number>
         const meta = SECTION_META[part.type]
         const label = part.ordinal ? `${part.ordinal}. ${part.title}` : part.title
         if (part.work_id) {
-          const repeat = (part.entry_count ?? 0) > 1
+          const repeats = part.repeat_count ?? 0
           return (
             <Link
               key={part.title}
@@ -650,7 +699,7 @@ function SeriesRow({ work, onTitles }: { work: Work; onTitles: (ids: Set<number>
                 aspect={meta.aspect}
                 rating={part.rating ?? null}
                 liked={part.liked}
-                flag={repeat ? `${part.entry_count}×` : null}
+                flag={repeats > 0 ? `${repeats + 1}×` : null}
               />
               <div className="poster__meta">
                 <div className="poster__title">{label}</div>

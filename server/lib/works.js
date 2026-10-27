@@ -153,6 +153,15 @@ export function workWithStats(id) {
 export const WORK_CARD_SQL = `
   SELECT w.*,
          (SELECT count(*) FROM entries e WHERE e.work_id = w.id) AS entry_count,
+         /*
+          * Watching a show is not the same as watching it twice. An import
+          * writes one entry per season, so counting entries called a single
+          * run through four series of The Durrells "4×". A repeat is the
+          * thing you ticked as a repeat, and nothing else.
+          */
+         (SELECT count(*) FROM entries e WHERE e.work_id = w.id AND e.is_repeat = 1) AS repeat_count,
+         (SELECT count(DISTINCT e.season) FROM entries e
+            WHERE e.work_id = w.id AND e.season IS NOT NULL) AS season_count,
          (SELECT max(e.rating) FROM entries e WHERE e.work_id = w.id) AS rating,
          (SELECT max(e.liked) FROM entries e WHERE e.work_id = w.id) AS liked,
          (SELECT max(e.consumed_on) FROM entries e WHERE e.work_id = w.id) AS last_on,

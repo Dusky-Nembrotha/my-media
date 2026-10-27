@@ -14,6 +14,10 @@ export interface WorkCard {
   rating: number | null
   liked?: boolean
   entry_count: number
+  /** Entries you marked as a rewatch — the only thing that means "again". */
+  repeat_count?: number
+  /** Distinct seasons logged, which an import writes one entry each for. */
+  season_count?: number
   last_on: string | null
   status: string | null
   runtime?: number | null

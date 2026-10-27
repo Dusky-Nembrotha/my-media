@@ -48,6 +48,8 @@ export function PosterCard({ work, showMeta = true, aspect, selectable, selected
     rating: number | null
     liked?: boolean
     entry_count?: number
+    repeat_count?: number
+    season_count?: number
     status?: string | null
   }
   showMeta?: boolean
@@ -62,7 +64,12 @@ export function PosterCard({ work, showMeta = true, aspect, selectable, selected
   onSelect?: (id: number) => void
 }) {
   const status = statusLabel(work.status, work.type)
-  const repeat = (work.entry_count ?? 0) > 1
+  /*
+   * "3×" should mean you watched it three times, not that three rows exist.
+   * An import writes one per season, so a single run through The Durrells was
+   * being badged as four viewings. Only a rewatch you marked as one counts.
+   */
+  const repeats = work.repeat_count ?? 0
 
   const body = (
     <>
@@ -72,7 +79,7 @@ export function PosterCard({ work, showMeta = true, aspect, selectable, selected
         type={work.type}
         rating={work.rating}
         liked={work.liked}
-        flag={status || (repeat ? `${work.entry_count}×` : null)}
+        flag={status || (repeats > 0 ? `${repeats + 1}×` : null)}
         aspect={aspect}
       />
       {showMeta && (
