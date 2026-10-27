@@ -8,9 +8,10 @@ import * as wiki from './wikipedia.js'
 import * as wikidata from './wikidata.js'
 import * as omdb from './omdb.js'
 import * as gbooks from './googlebooks.js'
+import * as imdbdata from './imdbdata.js'
 import { normaliseTitle, uniqueBy } from '../lib/util.js'
 
-export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks }
+export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks, imdbdata }
 
 const fp = (c) => `${c.type}|${normaliseTitle(c.title)}|${c.year || ''}`
 
@@ -18,6 +19,33 @@ const fp = (c) => `${c.type}|${normaliseTitle(c.title)}|${c.year || ''}`
  * Which providers cover which media type. TMDB is optional (needs a key) but
  * takes precedence for film/TV when present; everything else is keyless.
  */
+/**
+ * What the public and the critics made of a film or show.
+ *
+ * IMDb's own score comes from the local copy of their published dataset:
+ * free, instant, and with no daily allowance to spend. OMDb is still asked,
+ * because Rotten Tomatoes and Metacritic are only available through it — but
+ * when its thousand-a-day runs out, the IMDb number survives, which is the
+ * one most people actually wanted.
+ */
+export async function screenRatings({ imdbId, title, year, type }) {
+  const local = imdbdata.score({ imdbId, title, year, type })
+  const found = await omdb.ratings({ imdbId, title, year, type }).catch(() => null)
+
+  const out = (found?.ratings || []).filter((r) => !(local && r.source === 'IMDb'))
+  if (local) {
+    out.unshift({
+      source: 'IMDb',
+      score: local.rating,
+      scale: 10,
+      display: local.rating.toFixed(1),
+      votes: local.votes,
+      url: local.url,
+    })
+  }
+  return { ratings: out, imdbId: found?.imdbId ?? null }
+}
+
 export function providersFor(type) {
   switch (type) {
     case 'film': return [tmdb.hasKey() && 'tmdb', 'wikipedia'].filter(Boolean)

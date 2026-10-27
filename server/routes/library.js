@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes, bookNoise, enrich, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks } from '../providers/index.js'
+import { searchProviders, searchAllTypes, bookNoise, enrich, screenRatings, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks, imdbdata } from '../providers/index.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -482,7 +482,7 @@ router.get('/works/:id/ratings', async (req, res) => {
   const screen = work.type === 'film' || work.type === 'tv'
 
   if (screen) {
-    const found = await omdb.ratings({
+    const found = await screenRatings({
       imdbId: work.imdb_id, title: work.title, year: work.year, type: work.type,
     }).catch(() => null)
     if (found?.ratings?.length) out.push(...found.ratings)
@@ -888,15 +888,23 @@ router.get('/hot', async (req, res) => {
    * Cached for a fortnight; a missing answer just leaves the badge off.
    */
   const imdb = new Map()
-  if ((type === 'film' || type === 'tv') && omdb.hasKey()) {
-    const BATCH = 5
-    for (let i = 0; i < items.length; i += BATCH) {
-      const slice = items.slice(i, i + BATCH)
-      await Promise.all(slice.map(async (item) => {
-        const found = await omdb.ratings({ title: item.title, year: item.year, type }).catch(() => null)
-        const score = (found?.ratings || []).find((r) => r.source === 'IMDb')
-        if (score) imdb.set(item.title, { rating: score.score, votes: score.votes ?? null })
-      }))
+  if (type === 'film' || type === 'tv') {
+    if (imdbdata.hasDataset()) {
+      // Local, instant, and nothing to run out of.
+      for (const item of items) {
+        const score = imdbdata.score({ imdbId: item.imdb_id, title: item.title, year: item.year, type })
+        if (score) imdb.set(item.title, { rating: score.rating, votes: score.votes })
+      }
+    } else if (omdb.hasKey()) {
+      const BATCH = 5
+      for (let i = 0; i < items.length; i += BATCH) {
+        const slice = items.slice(i, i + BATCH)
+        await Promise.all(slice.map(async (item) => {
+          const found = await omdb.ratings({ title: item.title, year: item.year, type }).catch(() => null)
+          const score = (found?.ratings || []).find((r) => r.source === 'IMDb')
+          if (score) imdb.set(item.title, { rating: score.score, votes: score.votes ?? null })
+        }))
+      }
     }
   }
 
@@ -981,7 +989,7 @@ router.get('/preview', async (req, res) => {
       ? tmdb.watchProviders(type, tmdbId, String(setting('watch_region') || 'GB').toUpperCase()).catch(() => null)
       : null,
     screen
-      ? omdb.ratings({ imdbId: found?.imdb_id, title: found?.title || title, year: found?.year ?? year, type })
+      ? screenRatings({ imdbId: found?.imdb_id, title: found?.title || title, year: found?.year ?? year, type })
         .catch(() => null)
       : null,
     screen && tmdbId
