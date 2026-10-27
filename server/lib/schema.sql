@@ -167,6 +167,10 @@ CREATE TABLE IF NOT EXISTS rec_blocks (
   fingerprint TEXT PRIMARY KEY,
   user_id     INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
   reason      TEXT,
+  -- What was turned down, not merely that it was: the genres, people and
+  -- keywords of the thing you rejected, so "no more of this sort of thing"
+  -- can be worked out from a handful of rejections.
+  attrs       TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

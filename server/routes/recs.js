@@ -124,9 +124,12 @@ router.get('/recommendations', async (req, res) => {
 })
 
 router.post('/recommendations/dismiss', (req, res) => {
-  const { fingerprint, reason } = req.body
-  if (!fingerprint) return res.status(400).json({ error: 'fingerprint is required' })
-  blockRecommendation(fingerprint, reason)
+  const { fingerprint, reason, pick } = req.body
+  const fp = fingerprint || pick?.fingerprint
+  if (!fp) return res.status(400).json({ error: 'fingerprint is required' })
+  // The pick travels with the verdict: what you turned down is the part
+  // worth learning from, and it is gone the moment the card is.
+  blockRecommendation(fp, reason, pick)
   res.json({ ok: true })
 })
 
@@ -150,12 +153,22 @@ router.post('/recommendations/log', async (req, res) => {
   if (!p?.title || !p?.type) return res.status(400).json({ error: 'title and type are required' })
   let seed = {
     type: p.type, title: p.title, year: p.year, creators: p.creators,
+    release_date: p.release_date || null,
     poster_url: p.poster_url, genres: p.genres, overview: p.overview,
     tmdb_id: p.ids?.tmdb_id, imdb_id: p.ids?.imdb_id, isbn: p.ids?.isbn, olid: p.ids?.olid,
   }
   const { work, created } = upsertWork(seed)
   if (created || !work.poster_url) queueEnrichment([work.id])
-  const consumedOn = req.body.consumed_on === undefined ? today() : req.body.consumed_on
+  /*
+   * A series is watched over weeks and nobody sets a date for every show they
+   * tick off, so "today" is almost always wrong. Its first air date is at
+   * least in the right era, and the sheet that follows can correct it.
+   * Anything the caller states explicitly wins, including an explicit null.
+   */
+  const airDate = work.release_date || p.release_date || (p.year ? `${p.year}-01-01` : null)
+  const consumedOn = req.body.consumed_on !== undefined
+    ? req.body.consumed_on
+    : (work.type === 'tv' && airDate ? airDate : today())
   const stmt = run(
     `INSERT INTO entries (user_id, work_id, status, rating, consumed_on, format, source)
      VALUES (?, ?, 'completed', ?, ?, ?, 'recommendation')`,

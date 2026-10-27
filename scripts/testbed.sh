@@ -23,6 +23,9 @@ case "$cmd" in
   start)
     [ -f "$pidfile" ] && kill "$(cat "$pidfile")" 2>/dev/null
     dir=$(mktemp -d)
+    # Remember where it put its database, so a test can assert on what landed
+    # there and not only on what the API said.
+    echo "$dir" > "/tmp/testbed-$port.dir"
     # setsid detaches it from this shell so it survives the command returning.
     setsid env SHELVED_DATA="$dir" SHELVED_ALLOW_SETUP=1 PORT="$port" \
       node server/index.js > "$log" 2>&1 < /dev/null &

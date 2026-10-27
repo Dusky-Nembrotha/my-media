@@ -107,6 +107,47 @@ check "run the import"         -X POST "$BASE/import/apply" -H 'Content-Type: ap
 SHOWS=$(curl -s -m 20 -b "$JAR" "$BASE/works?type=tv" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).total)})' 2>/dev/null)
 if [ "$SHOWS" = "1" ]; then ok "episodes grouped into one show"; else bad "episodes grouped into one show" "got $SHOWS shows"; fi
 
+# Logging a suggestion: a show is assumed watched when it aired, because
+# nobody sets a date for every series they tick off and "today" is wrong for
+# almost all of them. A film gets no such excuse and defaults to today.
+echo
+echo "  Logging a suggestion"
+check "log a TV suggestion"    -X POST "$BASE/recommendations/log" -H 'Content-Type: application/json' \
+  -d '{"pick":{"type":"tv","title":"Smoke Test Show","year":2017,"release_date":"2017-04-26"}}'
+WHEN=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/smoke-last.json","utf8")).consumed_on)' 2>/dev/null)
+if [ "$WHEN" = "2017-04-26" ]; then ok "TV defaults to its air date"; else bad "TV defaults to its air date" "got $WHEN"; fi
+
+check "log a TV suggestion (year only)" -X POST "$BASE/recommendations/log" -H 'Content-Type: application/json' \
+  -d '{"pick":{"type":"tv","title":"Smoke Test Undated","year":1999}}'
+WHEN=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/smoke-last.json","utf8")).consumed_on)' 2>/dev/null)
+if [ "$WHEN" = "1999-01-01" ]; then ok "falls back to the start of its year"; else bad "falls back to the start of its year" "got $WHEN"; fi
+
+check "log a film suggestion"  -X POST "$BASE/recommendations/log" -H 'Content-Type: application/json' \
+  -d '{"pick":{"type":"film","title":"Smoke Test Film","year":2017,"release_date":"2017-04-26"}}'
+WHEN=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/smoke-last.json","utf8")).consumed_on)' 2>/dev/null)
+if [ "$WHEN" = "$(date +%F)" ]; then ok "a film still defaults to today"; else bad "a film still defaults to today" "got $WHEN"; fi
+
+check "an explicit date wins"  -X POST "$BASE/recommendations/log" -H 'Content-Type: application/json' \
+  -d '{"pick":{"type":"tv","title":"Smoke Test Stated","year":2017,"release_date":"2017-04-26"},"consumed_on":"2024-12-25"}'
+WHEN=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/smoke-last.json","utf8")).consumed_on)' 2>/dev/null)
+if [ "$WHEN" = "2024-12-25" ]; then ok "an explicit date is not overridden"; else bad "an explicit date is not overridden" "got $WHEN"; fi
+
+# A rejection must carry what was rejected, or "no more of this sort of
+# thing" has nothing to work from.
+check "dismiss a suggestion"   -X POST "$BASE/recommendations/dismiss" -H 'Content-Type: application/json' \
+  -d '{"fingerprint":"film|smoke test reject","reason":"not interested","pick":{"type":"film","title":"Smoke Test Reject","year":2001,"genres":["Western"],"creators":[{"role":"Director","name":"Smoke Helmer"}]}}'
+KEPT=$(node -e '
+  const { DatabaseSync } = require("node:sqlite")
+  const dir = require("fs").readFileSync(`/tmp/testbed-${process.argv[1]}.dir`, "utf8").trim()
+  const db = new DatabaseSync(`${dir}/shelved.db`, { readOnly: true })
+  const r = db.prepare("SELECT attrs FROM rec_blocks WHERE fingerprint = ?").get("film|smoke test reject")
+  console.log(r ? r.attrs : "(no row)")
+' "$PORT" 2>/dev/null)
+case "$KEPT" in
+  *Western*) ok "the rejection remembers what it was" ;;
+  *) bad "the rejection remembers what it was" "attrs=$KEPT" ;;
+esac
+
 echo
 echo "  Editing and removing"
 check "edit an entry"          -X PATCH "$BASE/entries/1" -H 'Content-Type: application/json' -d '{"rating":4}'

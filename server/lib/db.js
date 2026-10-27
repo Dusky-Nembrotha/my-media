@@ -76,6 +76,38 @@ if (addColumn('entries', 'format', 'TEXT')) {
   console.log('  migrated: added entries.format')
 }
 
+/*
+ * A rejection used to record only that you had made one. Keeping what you
+ * turned down — its genres, its people, its keywords — is what lets the engine
+ * learn the shape of what you do not want, rather than merely crossing off one
+ * title at a time.
+ *
+ * Rejections made before this column existed can often be recovered: the last
+ * couple of suggestion lists per type are still cached, and they hold the full
+ * pick. Best effort, once.
+ */
+if (addColumn('rec_blocks', 'attrs', 'TEXT')) {
+  let found = 0
+  const blocked = db.prepare('SELECT fingerprint FROM rec_blocks').all().map((r) => r.fingerprint)
+  if (blocked.length) {
+    const want = new Set(blocked)
+    const save = db.prepare('UPDATE rec_blocks SET attrs = ? WHERE fingerprint = ? AND attrs IS NULL')
+    for (const row of db.prepare('SELECT payload FROM rec_cache').all()) {
+      let picks
+      try { picks = JSON.parse(row.payload)?.picks } catch { continue }
+      for (const p of picks || []) {
+        if (!want.has(p.fingerprint)) continue
+        save.run(JSON.stringify({
+          genres: p.genres || [], creators: p.creators || [],
+          year: p.year ?? null, language: p.language ?? null,
+        }), p.fingerprint)
+        found++
+      }
+    }
+  }
+  console.log(`  migrated: added rec_blocks.attrs${found ? ` (recovered ${found} of ${blocked.length})` : ''}`)
+}
+
 // Indexes that depend on migrated columns, so they come after the ALTERs.
 db.exec('CREATE INDEX IF NOT EXISTS entries_user_idx ON entries(user_id, consumed_on DESC)')
 

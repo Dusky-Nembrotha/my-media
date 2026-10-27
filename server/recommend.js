@@ -95,7 +95,7 @@ const PLOT_TAG = new RegExp([
 ].join('|'), 'i')
 
 /** Subjects worth neither scoring on nor citing as a reason. */
-function uselessSubject(label) {
+export function uselessSubject(label) {
   const g = String(label || '').trim()
   return !g || TOO_BROAD.test(g) || PLOT_TAG.test(g)
 }
@@ -965,6 +965,7 @@ function seedsOf(c) {
 /** Score, explain and diversify. */
 export function rank(candidates, profile, { limit = 12, shortlistOnly = false, crowd = null, shownBefore = null } = {}) {
   const skip = excluded()
+  const distaste = buildDistaste()
   const merged = new Map()
 
   for (const c of candidates) {
@@ -1105,6 +1106,9 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
 
     // Already offered recently: still eligible, but it has had its turn.
     if (shownBefore?.has(fpOf(c))) score -= 0.45
+
+    // And things built like the ones you have refused.
+    score -= distastePenalty(c, distaste, profile)
 
     const reasons = explain(c, profile, contributions, crowdSlot)
 
@@ -1352,6 +1356,9 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
       type: p.type,
       title: p.title,
       year: p.year,
+      // TMDB gives a show's first air date; it is the sensible default for
+      // "when did I watch this", so it has to survive the trip to the client.
+      release_date: p.release_date || null,
       creators: (p.creators || []).slice(0, 4),
       genres: (p.genres || []).slice(0, 4),
       overview: p.overview || null,
@@ -1387,8 +1394,73 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
   return { ...payload, cached: false }
 }
 
-export function blockRecommendation(fingerprint, reason) {
-  run('INSERT OR REPLACE INTO rec_blocks (user_id, fingerprint, reason) VALUES (?, ?, ?)', systemUserId(), fingerprint, reason || null)
+/**
+ * Never show me this again — and, given a few of them, never show me this
+ * *sort of thing* again. The pick is kept alongside the verdict so the second
+ * half of that promise can be honoured.
+ */
+export function blockRecommendation(fingerprint, reason, pick) {
+  const attrs = pick && (pick.genres?.length || pick.creators?.length)
+    ? JSON.stringify({
+        genres: (pick.genres || []).slice(0, 6),
+        creators: (pick.creators || []).slice(0, 4),
+        year: pick.year ?? null,
+        language: pick.language ?? null,
+      })
+    : null
+  run(
+    'INSERT OR REPLACE INTO rec_blocks (user_id, fingerprint, reason, attrs) VALUES (?, ?, ?, ?)',
+    systemUserId(), fingerprint, reason || null, attrs,
+  )
+}
+
+/*
+ * What you keep turning down.
+ *
+ * Deliberately cautious. One rejection is a mood — you were not in the mood
+ * for a western on Tuesday — so an attribute has to be turned down more than
+ * once before it counts at all. And a rejection is weighed against what you
+ * actually own: dismissing two crime films when a hundred of your favourites
+ * are crime films says nothing about crime, it says something about those two
+ * films. Only the attributes over-represented among your rejections survive.
+ */
+const DISTASTE_MIN = 2
+const DISTASTE_WEIGHT = 0.55
+const DISTASTE_CAP = 0.9
+
+function buildDistaste() {
+  const counts = new Map()
+  for (const row of all('SELECT attrs FROM rec_blocks WHERE attrs IS NOT NULL')) {
+    const parsed = json(row.attrs, null)
+    if (!parsed) continue
+    /*
+     * The same filter the positive side uses. Open Library files a Frank
+     * Herbert novel under "Tooth Diseases" and half its catalogue under
+     * "Fiction"; neither is a thing anyone can dislike, and a broad tag
+     * recurring across rejections would quietly condemn an entire library.
+     */
+    const cleaned = { ...parsed, genres: (parsed.genres || []).filter((g) => !uselessSubject(g)) }
+    // One title cannot vote twice for the same attribute.
+    for (const key of new Set(attrsOf(cleaned).map((a) => a.key))) {
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+  }
+  return counts
+}
+
+/** How far a candidate should fall for looking like things you have refused. */
+function distastePenalty(c, distaste, profile) {
+  if (!distaste.size) return 0
+  let pen = 0
+  for (const { key, weight } of candidateAttrs(c)) {
+    const turnedDown = distaste.get(key) || 0
+    if (turnedDown < DISTASTE_MIN) continue
+    // Discounted by how much of this you already own and kept.
+    const owned = profile.attrs.get(key)?.n ?? 0
+    const share = turnedDown / (turnedDown + owned + 1)
+    pen += (KIND_WEIGHT[key.split(':')[0]] ?? 0.4) * weight * share
+  }
+  return Math.min(DISTASTE_CAP, DISTASTE_WEIGHT * pen)
 }
 
 /** The "your taste, in numbers" panel. */

@@ -114,7 +114,9 @@ export function Suggestions({ type }: { type: MediaType }) {
           type: pick.type, consumedOn: res.consumed_on,
         })
       } else {
-        await api.post('/recommendations/dismiss', { fingerprint: pick.fingerprint, reason: 'not interested' })
+        // Send the whole pick, not just its name: "no more of this sort of
+        // thing" can only be learnt from what the thing was.
+        await api.post('/recommendations/dismiss', { fingerprint: pick.fingerprint, reason: 'not interested', pick })
       }
       setHidden((h) => [...h, pick.fingerprint])
       if (what !== 'dismiss') void refresh()

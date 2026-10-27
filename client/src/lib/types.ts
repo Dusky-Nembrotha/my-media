@@ -104,6 +104,7 @@ export interface Pick {
   type: MediaType
   title: string
   year: number | null
+  release_date: string | null
   creators: Creator[]
   genres: string[]
   overview: string | null
