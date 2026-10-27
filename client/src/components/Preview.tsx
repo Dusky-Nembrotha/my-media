@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Modal } from './Modal'
 import { Icon } from './Icon'
 import { PosterArt } from './Poster'
+import { CreatorSheet } from './CreatorSheet'
 import { api, qs } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, creatorLine, fmtDate, fmtRuntime } from '../lib/format'
@@ -16,6 +17,8 @@ export interface PreviewTarget {
   /** A date to inherit when adding — the rest of a series read in one run. */
   consumedOn?: string | null
 }
+
+interface Provider { name: string; logo?: string | null }
 
 interface PreviewBody {
   type: MediaType
@@ -42,13 +45,29 @@ interface PreviewBody {
  * deciding. This fetches the same details a work page would show, without
  * adding anything to the library.
  */
-export function Preview({ target, onClose }: { target: PreviewTarget; onClose: () => void }) {
+export function Preview({ target, onClose, onLogged }: {
+  target: PreviewTarget
+  onClose: () => void
+  /** Told what was created, so the caller can offer a rating and a date. */
+  onLogged?: (thing: { workId: number; entryId: number | null; title: string; type: MediaType; consumedOn: string | null }) => void
+}) {
   const meta = SECTION_META[target.type]
   const navigate = useNavigate()
   const { toast, refresh } = useApp()
   const [busy, setBusy] = useState(false)
+  const [creator, setCreator] = useState<string | null>(null)
+  // Following "more like this" from inside the sheet, without losing your place.
+  const [also, setAlso] = useState<PreviewTarget | null>(null)
 
-  const { data, loading } = useFetch<{ found: boolean; work_id: number | null; preview: PreviewBody }>(
+  const { data, loading } = useFetch<{
+    found: boolean
+    work_id: number | null
+    preview: PreviewBody
+    watch: { stream?: Provider[]; rent?: Provider[]; buy?: Provider[]; free?: Provider[]; link?: string } | null
+    region: string
+    ratings: { source: string; display: string | null; url: string | null }[]
+    similar: { type: MediaType; title: string; year: number | null; poster_url: string | null; work_id: number | null }[]
+  }>(
     `/preview${qs({ type: target.type, title: target.title, creator: target.creator ?? null, year: target.year ?? null })}`,
     [target.type, target.title, target.creator, target.year],
   )
@@ -65,10 +84,17 @@ export function Preview({ target, onClose }: { target: PreviewTarget; onClose: (
           year: p?.year ?? target.year ?? null,
           creators: p?.creators ?? [],
           poster_url: p?.poster_url ?? null,
+          /*
+           * This sheet has just looked the thing up, so there is nothing left
+           * to find. Letting the server go and fetch it all again made the
+           * request slow enough to be killed by the proxy — a 502 on a button
+           * whose whole job is to be instant.
+           */
+          enrichNow: false,
         })
         toast(`${p?.title ?? target.title} added to ${meta.planned.toLowerCase()}`)
       } else {
-        const res = await api.post<{ work: { id: number; title: string } }>('/log', {
+        const res = await api.post<{ work: { id: number; title: string }; entry_id: number }>('/log', {
           work: {
             type: target.type,
             title: p?.title ?? target.title,
@@ -79,11 +105,27 @@ export function Preview({ target, onClose }: { target: PreviewTarget; onClose: (
             genres: p?.genres ?? [],
             pages: p?.pages ?? null,
           },
-          consumed_on: target.consumedOn ?? undefined,
+          /*
+           * A series is watched over weeks, so "today" is rarely right and
+           * nobody wants to set a date for every show they add. Its first
+           * air date is at least in the right era, and it can be edited in
+           * the sheet that follows.
+           */
+          consumed_on: target.consumedOn
+            ?? (target.type === 'tv' && (p?.release_date || p?.year)
+              ? (p.release_date || `${p.year}-01-01`)
+              : undefined),
           status: 'completed',
           format: target.type === 'book' ? 'book' : null,
         })
-        toast(`${meta.verb} ${res.work.title}`)
+        if (onLogged) {
+          onLogged({
+            workId: res.work.id, entryId: res.entry_id, title: res.work.title,
+            type: target.type, consumedOn: target.consumedOn ?? null,
+          })
+        } else {
+          toast(`${meta.verb} ${res.work.title}`)
+        }
       }
       void refresh()
       onClose()
@@ -97,6 +139,13 @@ export function Preview({ target, onClose }: { target: PreviewTarget; onClose: (
     p?.pages ? `${p.pages} pages` : null,
     p?.external_rating ? `${p.external_rating.toFixed(1)} externally` : null,
   ].filter(Boolean)
+
+  if (creator) {
+    return <CreatorSheet name={creator} type={target.type} onClose={() => setCreator(null)} />
+  }
+  if (also) {
+    return <Preview target={also} onClose={() => setAlso(null)} onLogged={onLogged} />
+  }
 
   return (
     <Modal
@@ -145,8 +194,16 @@ export function Preview({ target, onClose }: { target: PreviewTarget; onClose: (
                   <span className="pill" style={{ color: meta.hue }}>{meta.singular}</span>
                   {data?.work_id && <span className="pill pill--good">Already yours</span>}
                 </span>
-                {creatorLine(p?.creators ?? [], 3) && (
-                  <span className="u-sm u-dim">{creatorLine(p?.creators ?? [], 3)}</span>
+                {/* The people are a way in, not just a label. */}
+                {(p?.creators ?? []).length > 0 && (
+                  <span className="u-sm u-dim">
+                    {(p?.creators ?? []).slice(0, 3).map((c, i) => (
+                      <span key={c.name}>
+                        {i > 0 && <span className="u-mut">, </span>}
+                        <button className="linkish" onClick={() => setCreator(c.name)}>{c.name}</button>
+                      </span>
+                    ))}
+                  </span>
                 )}
                 {facts.length > 0 && <span className="u-xs u-mut">{facts.join(' · ')}</span>}
                 {p?.genres?.length ? (
@@ -166,7 +223,81 @@ export function Preview({ target, onClose }: { target: PreviewTarget; onClose: (
             )}
 
             {p?.cast?.length ? (
-              <p className="u-xs u-mut" style={{ margin: 0 }}>With {p.cast.slice(0, 5).join(', ')}</p>
+              <p className="u-xs u-mut" style={{ margin: 0 }}>
+                With {p.cast.slice(0, 6).map((n, i) => (
+                  <span key={n}>
+                    {i > 0 && ', '}
+                    <button className="linkish" onClick={() => setCreator(n)}>{n}</button>
+                  </span>
+                ))}
+              </p>
+            ) : null}
+
+            {/* What everyone else made of it. */}
+            {data?.ratings?.length ? (
+              <div className="pubratings">
+                {data.ratings.filter((r) => r.display).map((r) => (
+                  r.url
+                    ? <a key={r.source} className="pubrating" href={r.url} target="_blank" rel="noreferrer">
+                        <span className="pubratings__score u-tnum">{r.display}</span>
+                        <span className="pubratings__src">{r.source}</span>
+                      </a>
+                    : <span key={r.source} className="pubrating">
+                        <span className="pubratings__score u-tnum">{r.display}</span>
+                        <span className="pubratings__src">{r.source}</span>
+                      </span>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Where you could actually watch it tonight. */}
+            {data?.watch && (data.watch.stream?.length || data.watch.free?.length || data.watch.rent?.length) ? (
+              <div className="u-col" style={{ gap: 8 }}>
+                <span className="u-caps">Where to watch · {data.region}</span>
+                {([['Streaming', data.watch.stream], ['Free', data.watch.free], ['Rent', data.watch.rent]] as const)
+                  .filter(([, list]) => list?.length)
+                  .map(([label, list]) => (
+                    <div key={label} className="u-row u-wrap" style={{ gap: 8, alignItems: 'center' }}>
+                      <span className="u-xs u-mut" style={{ minWidth: 62 }}>{label}</span>
+                      <span className="providers">
+                        {(list || []).slice(0, 6).map((pr) => (
+                          <span key={pr.name} className="provider" title={pr.name}>
+                            {pr.logo ? <img src={pr.logo} alt={pr.name} loading="lazy" /> : <span className="provider__text">{pr.name}</span>}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                {data.watch.link && (
+                  <a className="u-xs linkish" href={data.watch.link} target="_blank" rel="noreferrer">
+                    Open on JustWatch <Icon name="external" size={11} />
+                  </a>
+                )}
+              </div>
+            ) : null}
+
+            {/* And what it sits next to. */}
+            {data?.similar?.length ? (
+              <div className="u-col" style={{ gap: 8 }}>
+                <span className="u-caps">More like this</span>
+                <div className="previewrow">
+                  {data.similar.map((x) => (
+                    <button
+                      key={x.title}
+                      type="button"
+                      className="previewrow__item"
+                      onClick={() => {
+                        if (x.work_id) { onClose(); navigate(`/work/${x.work_id}`) }
+                        else setAlso({ type: x.type, title: x.title, year: x.year })
+                      }}
+                      title={x.title}
+                    >
+                      <PosterArt src={x.poster_url} title={x.title} type={x.type} aspect={meta.aspect} />
+                      <span className="previewrow__title u-trunc">{x.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
 
             {p?.provider && (

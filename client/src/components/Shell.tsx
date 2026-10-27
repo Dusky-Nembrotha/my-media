@@ -12,9 +12,15 @@ export function Shell({ children }: { children: ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
 
+  /*
+   * Every library is listed, empty or not — you cannot add your first podcast
+   * from a section that only appears once you have one. The exception is
+   * individual tracks, which are a by-product of music imports rather than
+   * somewhere anyone browses; that one shows up once there is something in it.
+   */
   const used = TYPE_ORDER.filter((t) => {
     const s = sections.find((x) => x.type === t)
-    return (s?.works ?? 0) > 0 || ['film', 'tv', 'book', 'audiobook', 'album'].includes(t)
+    return t !== 'track' || (s?.works ?? 0) > 0
   })
 
   useEffect(() => { setMoreOpen(false) }, [location.pathname])

@@ -135,7 +135,14 @@ function applyEntry(r, work, source, summary) {
     if (r.notes && !existing.notes) patch.notes = r.notes
     if (r.liked && !existing.liked) patch.liked = 1
     if (r.progress && !existing.progress) patch.progress = r.progress
-    if (r.status && existing.status !== r.status && r.status !== 'completed') patch.status = r.status
+    /*
+     * Never walk a finished entry backwards. A Plex library scan reports
+     * films sitting unplayed on the server, and plenty of those were watched
+     * years ago somewhere else — folding that in would have marked a hundred
+     * and sixty-eight films you have seen as still to watch.
+     */
+    if (r.status && existing.status !== r.status
+      && r.status !== 'completed' && existing.status !== 'completed') patch.status = r.status
     if (!existing.external_key && r.external_key) patch.external_key = r.external_key
     const tags = json(existing.tags, [])
     const merged = [...new Set([...tags, ...(r.tags || [])])]

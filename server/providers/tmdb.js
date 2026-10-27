@@ -190,14 +190,31 @@ export async function findByExternalId(externalId, type) {
   }
 }
 
-export async function trending(type, limit = 20) {
+/**
+ * What is being watched this week.
+ *
+ * Paged, because the Hot list loads a screenful at a time and then keeps
+ * going as you scroll; TMDB returns twenty per page, so several are fetched
+ * and stitched together when more than that is asked for.
+ */
+export async function trending(type, limit = 20, { offset = 0 } = {}) {
   if (!hasKey()) return []
-  try {
-    const data = await fetchJson(url(`/trending/${type === 'tv' ? 'tv' : 'movie'}/week`), { ttlSeconds: 60 * 60 * 12 })
-    return (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
-  } catch {
-    return []
+  const path = `/trending/${type === 'tv' ? 'tv' : 'movie'}/week`
+  const need = offset + limit
+  const out = []
+
+  for (let page = 1; page <= Math.ceil(need / 20) && page <= 10; page++) {
+    try {
+      const data = await fetchJson(url(path, { page: String(page) }), { ttlSeconds: 60 * 60 * 12 })
+      const hits = (data.results || []).map((r) => normalise(r, type)).filter(Boolean)
+      out.push(...hits)
+      if (!hits.length || page >= (data.total_pages || 1)) break
+    } catch {
+      break
+    }
   }
+
+  return withGenreNames(out.slice(offset, offset + limit), await genreMap(type))
 }
 
 /**
@@ -310,6 +327,27 @@ export async function collection(id, limit = 24) {
       name: data.name,
       overview: data.overview || null,
       parts: withGenreNames(parts, await genreMap('film')),
+    }
+  } catch {
+    return null
+  }
+}
+
+/** A director or actor: portrait and biography, for the person card. */
+export async function person(name) {
+  if (!hasKey() || !name) return null
+  try {
+    const found = await fetchJson(url('/search/person', { query: name }), { ttlSeconds: 60 * 60 * 24 * 30 })
+    const hit = (found.results || [])[0]
+    if (!hit) return null
+    const full = await fetchJson(url(`/person/${hit.id}`), { ttlSeconds: 60 * 60 * 24 * 30 })
+    return {
+      id: hit.id,
+      name: full.name || name,
+      bio: full.biography || null,
+      image: full.profile_path ? `${IMG}/w400${full.profile_path}` : null,
+      url: full.homepage || null,
+      known_for: full.known_for_department || null,
     }
   } catch {
     return null

@@ -102,7 +102,15 @@ function uselessSubject(label) {
 
 // TMDB keywords that are bookkeeping, not taste: "based on novel or book" is
 // true of half the catalogue, and "You go for alcohol" is not a reason.
-const KEYWORD_NOISE = /based on|stinger|sequel|remake|prequel|woman director|independent film|alcohol|drug|nudity|sex|violence|profanity|^\d{4}s?$|anthology/i
+const KEYWORD_NOISE = new RegExp([
+  'based on', 'stinger', 'sequel', 'remake', 'prequel', 'woman director',
+  'independent film', 'alcohol', 'drug', 'nudity', 'sex', 'violence',
+  'profanity', '^\\d{4}s?$', 'anthology',
+  // Places. TMDB tags half its catalogue with where it was set, and "you go
+  // for chicago, illinois" is not a statement about anyone's taste.
+  '^[a-z .\'-]+, (?:[a-z .\'-]+)$', '\\b(?:city|island|state|county|province)\\b',
+  '^(?:new york|los angeles|london|paris|tokyo|chicago|san francisco|boston|texas|california)',
+].join('|'), 'i')
 
 /*
  * A reference work is not a reading recommendation, and a subject naming a
@@ -836,7 +844,22 @@ function explain(candidate, profile, contributions, crowdSlot) {
     const named = crowdSlot.because.map((b) => b.title).filter(Boolean).slice(0, 2)
     const stars = STAR(clamp(roundHalf(crowdSlot.predicted), 0.5, 5))
     if (named.length) {
-      bits.push(`People who share your taste in ${named.join(' and ')} rate this highly — predicted ${stars} for you`)
+      /*
+       * Say how much of the library this rests on.
+       *
+       * The prediction comes from the whole of it — every rating is folded
+       * into the taste vector that produces this number — but the sentence
+       * only had room to name the two titles that moved it most, which read
+       * as though the whole recommendation hung on those two. It does not,
+       * and saying so is the difference between a suggestion that looks
+       * arbitrary and one that looks earned.
+       */
+      const basis = crowdSlot.basis || 0
+      const rest = basis > named.length ? ` and ${basis - named.length} others you have rated` : ''
+      bits.push(
+        `Predicted ${stars} for you, from how people who share your taste rated`
+        + ` ${named.join(', ')}${rest}`,
+      )
     }
   }
 

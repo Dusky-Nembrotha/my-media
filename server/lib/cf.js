@@ -143,6 +143,8 @@ function createModel(file) {
     return {
       item_id: m.ids[row],
       score: confidence * (dot + quality * m.bias[row]) - popularity * fame,
+      // How many of your ratings went into the vector behind this number.
+      basis: user.n ?? 0,
       lift: dot,
       bias: m.bias[row],
       predicted: mu + user.bias + m.bias[row] + dot,

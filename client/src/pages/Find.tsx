@@ -3,6 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { PosterArt, PosterSkeleton } from '../components/Poster'
 import { Empty } from '../components/Modal'
+import { Preview } from '../components/Preview'
+import type { PreviewTarget } from '../components/Preview'
+import { JustLogged } from '../components/JustLogged'
+import type { LoggedThing } from '../components/JustLogged'
 import { api, qs } from '../lib/api'
 import { artworkUrl } from '../lib/img'
 import { useApp } from '../lib/store'
@@ -32,6 +36,8 @@ export function FindPage() {
   const [added, setAdded] = useState<Record<string, 'done' | 'planned'>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [order, setOrder] = useState<'relevance' | 'released'>('relevance')
+  const [preview, setPreview] = useState<PreviewTarget | null>(null)
+  const [logged, setLogged] = useState<LoggedThing | null>(null)
 
   useEffect(() => {
     if (!q.trim()) return
@@ -116,6 +122,15 @@ export function FindPage() {
 
   return (
     <div className="page">
+      {preview && (
+        <Preview
+          target={preview}
+          onClose={() => setPreview(null)}
+          onLogged={(t) => { setPreview(null); setLogged(t) }}
+        />
+      )}
+      {logged && <JustLogged thing={logged} onClose={() => setLogged(null)} />}
+
       <div className="section-head">
         <div>
           <h2>{q}</h2>
@@ -194,9 +209,18 @@ export function FindPage() {
             const m = SECTION_META[hit.type]
             return (
               <div key={key} className="findrow">
-                <span className="findrow__art" style={{ aspectRatio: m.aspect }}>
+                <button
+                  type="button"
+                  className="findrow__art poster__open"
+                  style={{ aspectRatio: m.aspect }}
+                  onClick={() => setPreview({
+                    type: hit.type, title: hit.title, year: hit.year,
+                    creator: hit.creators?.[0]?.name ?? null,
+                  })}
+                  title={`What is ${hit.title}?`}
+                >
                   <PosterArt src={hit.poster_url} title={hit.title} type={hit.type} aspect={m.aspect} />
-                </span>
+                </button>
                 <span className="u-col u-grow" style={{ gap: 3, minWidth: 0 }}>
                   <span style={{ fontSize: 14, fontWeight: 560 }}>{hit.title}</span>
                   <span className="u-xs u-mut u-trunc">

@@ -10,6 +10,7 @@ import { coverColours } from '../lib/coverColour'
 import { artworkUrl } from '../lib/img'
 import { ArtworkPicker } from '../components/ArtworkPicker'
 import { Preview } from '../components/Preview'
+import { CreatorSheet } from '../components/CreatorSheet'
 import type { PreviewTarget } from '../components/Preview'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtDate, fmtRuntime, relDate, statusLabel } from '../lib/format'
@@ -27,6 +28,8 @@ export function WorkPage() {
   const [pickingArt, setPickingArt] = useState(false)
   // Titles the series row is already showing, so they are not repeated below.
   const [inSeries, setInSeries] = useState<Set<number>>(new Set())
+  // Whose card is open, if any.
+  const [creator, setCreator] = useState<string | null>(null)
   const poster = data?.work?.poster_url ?? null
 
   useEffect(() => {
@@ -101,6 +104,8 @@ export function WorkPage() {
         className="workpanel"
         style={tint ? ({ ['--cover-base' as string]: tint.base, ['--cover-accent' as string]: tint.accent }) : undefined}
       >
+      {creator && <CreatorSheet name={creator} type={work.type} onClose={() => setCreator(null)} />}
+
       <Link to={meta.path} className="workclose" aria-label={`Back to ${meta.label}`} title={`Back to ${meta.label}`}>
         <Icon name="x" size={18} />
       </Link>
@@ -139,7 +144,7 @@ export function WorkPage() {
                       {g.names.map((n, i) => (
                         <span key={n}>
                           {i > 0 && <span className="u-mut">, </span>}
-                          <Link to={`${meta.path}?creator=${encodeURIComponent(n)}`} className="linkish">{n}</Link>
+                          <button className="linkish" onClick={() => setCreator(n)}>{n}</button>
                         </span>
                       ))}
                     </span>

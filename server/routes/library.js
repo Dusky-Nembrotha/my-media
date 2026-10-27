@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes, bookNoise, enrich, tmdb, ol, itunes, mb, wiki, wikidata, omdb } from '../providers/index.js'
+import { searchProviders, searchAllTypes, bookNoise, enrich, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks } from '../providers/index.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -706,22 +706,60 @@ router.get('/works/:id/series', async (req, res) => {
 router.get('/hot', async (req, res) => {
   const type = TYPES.includes(req.query.type) ? req.query.type : 'film'
   const limit = clamp(Number(req.query.limit) || 24, 1, 50)
+  const offset = clamp(Number(req.query.offset) || 0, 0, 400)
 
+  /*
+   * The whole chart is fetched, then weighted, then sorted, then paged — in
+   * that order. Doing it the other way round sorts each batch of eighteen on
+   * its own, so "by rating" produced eighteen descending, then eighteen more
+   * descending underneath, which is not a sorted list.
+   */
+  const pool = Math.min(100, Math.max(offset + limit, 60))
   let items = []
   try {
     if (type === 'film' || type === 'tv') {
-      items = await tmdb.trending(type, limit)
+      items = await tmdb.trending(type, pool, { offset: 0 })
     } else if (type === 'book' || type === 'audiobook') {
-      items = await ol.trending('weekly', { limit, type })
+      items = await ol.trending('weekly', { limit: pool, type })
     } else if (['album', 'track', 'podcast'].includes(type)) {
-      items = await itunes.charts(type, { limit, country: (setting('watch_region') || 'GB').toLowerCase() })
+      items = await itunes.charts(type, { limit: pool, country: (setting('watch_region') || 'GB').toLowerCase() })
     }
   } catch {
     items = []
   }
 
   if (!items.length) {
-    return res.json({ type, source: null, items: [], unsupported: type === 'game' })
+    return res.json({ type, source: null, items: [], offset, hasMore: false, unsupported: type === 'game' })
+  }
+
+  /*
+   * Tilt the chart towards what is being watched here.
+   *
+   * TMDB's trending list is worldwide, and a global chart is dominated by
+   * anime and Korean drama in a way that does not reflect a British evening's
+   * viewing. Nothing is dropped — plenty of it is excellent and some of it is
+   * already in this library — but English-language titles are pulled up a few
+   * places, and ones made here further still.
+   *
+   * A nudge rather than a filter: the point of this page is to say what is
+   * going on, and a chart that only showed what is going on in one country
+   * would be a worse answer to that.
+   */
+  const HOME = String(setting('watch_region') || 'GB').toUpperCase()
+  const homeLanguages = { GB: 'en', US: 'en', IE: 'en', AU: 'en', CA: 'en', NZ: 'en' }
+  const spoken = homeLanguages[HOME]
+  if (spoken && (type === 'film' || type === 'tv')) {
+    items = items
+      .map((item, i) => {
+        const lang = String(item.language || '').toLowerCase()
+        const countries = (item.metadata?.countries || []).map((c) => String(c).toUpperCase())
+        let lift = 0
+        if (lang === spoken) lift += 6
+        if (countries.includes(HOME)) lift += 4
+        return { item, rank: i - lift }
+      })
+      .sort((a, b) => a.rank - b.rank)
+      .map((x) => x.item)
   }
 
   const owned = new Map(
@@ -736,10 +774,51 @@ router.get('/hot', async (req, res) => {
     : (type === 'book' || type === 'audiobook') ? 'Open Library'
       : 'Apple'
 
+  /*
+   * IMDb's score on the card, for screen titles.
+   *
+   * TMDB has its own rating, but it is not the number people mean when they
+   * ask how a film is regarded. IMDb has no free API, so this comes through
+   * OMDb — one lookup per title, which is why it is done only for the batch
+   * being shown and cached for a fortnight afterwards. A missing answer just
+   * leaves the badge off.
+   */
+  const imdb = new Map()
+  if ((type === 'film' || type === 'tv') && omdb.hasKey()) {
+    const BATCH = 5
+    for (let i = 0; i < items.length; i += BATCH) {
+      const slice = items.slice(i, i + BATCH)
+      await Promise.all(slice.map(async (item) => {
+        const found = await omdb.ratings({ title: item.title, year: item.year, type }).catch(() => null)
+        const score = (found?.ratings || []).find((r) => r.source === 'IMDb')
+        if (score) imdb.set(item.title, { rating: score.score, votes: score.votes ?? null })
+      }))
+    }
+  }
+
+  /*
+   * Other ways to read the chart. "Hot" is the source's own order, which is
+   * what the page is for; the rest are for when you want the best-reviewed or
+   * the newest of what is current.
+   */
+  const sort = String(req.query.sort || 'hot')
+  if (sort === 'released') {
+    items = [...items].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+  } else if (sort === 'rating') {
+    items = [...items].sort((a, b) => (b.external_rating ?? 0) - (a.external_rating ?? 0))
+  }
+
+  // Page only once everything has been ordered.
+  const total = items.length
+  items = items.slice(offset, offset + limit)
+
   res.json({
     type,
     source,
-    items: items.slice(0, limit).map((item) => {
+    sort,
+    offset,
+    hasMore: offset + limit < total,
+    items: items.map((item) => {
       const key = `${type}|${normaliseTitle(item.title)}`
       const id = owned.get(key) ?? null
       return {
@@ -751,6 +830,7 @@ router.get('/hot', async (req, res) => {
         creators: (item.creators || []).filter((c) => c.role !== 'Cast').slice(0, 2),
         genres: (item.genres || []).slice(0, 3),
         external_rating: item.external_rating ?? null,
+        imdb: imdb.get(item.title) ?? null,
         tmdb_id: item.tmdb_id ?? null,
         isbn: item.isbn ?? null,
         olid: item.olid ?? null,
@@ -798,9 +878,46 @@ router.get('/preview', async (req, res) => {
     type, title.toLowerCase(),
   )
 
+  /*
+   * The same things a work page shows, for something you do not own: where it
+   * is streaming, what the critics made of it, and what it sits next to. A
+   * sheet with only a synopsis is a worse answer to "what is this?" than the
+   * page you would get if you owned it, and there is no reason for it to be.
+   */
+  const tmdbId = found?.tmdb_id ?? null
+  const screen = type === 'film' || type === 'tv'
+
+  const [watch, ratings, similar] = await Promise.all([
+    screen && tmdbId
+      ? tmdb.watchProviders(type, tmdbId, String(setting('watch_region') || 'GB').toUpperCase()).catch(() => null)
+      : null,
+    screen
+      ? omdb.ratings({ imdbId: found?.imdb_id, title: found?.title || title, year: found?.year ?? year, type })
+        .catch(() => null)
+      : null,
+    screen && tmdbId
+      ? tmdb.recommendations(type, tmdbId, 10).catch(() => [])
+      : [],
+  ])
+
+  const owned = new Map(
+    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
+  )
+
   res.json({
     found: Boolean(found),
     work_id: mine?.id ?? null,
+    watch: watch || null,
+    region: String(setting('watch_region') || 'GB').toUpperCase(),
+    ratings: ratings?.ratings || [],
+    similar: (similar || []).slice(0, 8).map((x) => ({
+      type,
+      title: x.title,
+      year: x.year ?? null,
+      poster_url: x.poster_url ?? null,
+      creators: (x.creators || []).filter((c) => c.role !== 'Cast').slice(0, 1),
+      work_id: owned.get(`${type}|${normaliseTitle(x.title)}`) ?? null,
+    })),
     preview: {
       type,
       title: found?.title || title,
@@ -820,6 +937,118 @@ router.get('/preview', async (req, res) => {
       isbn: found?.isbn ?? null,
       olid: found?.olid ?? null,
     },
+  })
+})
+
+/**
+ * Everything about one person, for the card their name opens.
+ *
+ * A portrait and a paragraph so you know who they are, then the whole of
+ * their output arranged the way you would actually read or watch it —
+ * grouped into series, in order, with the ones you already have marked.
+ * Adding six books of a series one at a time from search is miserable; this
+ * is the page that makes it a few taps.
+ */
+router.get('/creator/profile', async (req, res) => {
+  const name = String(req.query.name || '').trim()
+  if (!name) return res.status(400).json({ error: 'A name is needed' })
+  const type = TYPES.includes(req.query.type) ? req.query.type : 'book'
+  const screen = type === 'film' || type === 'tv'
+
+  // Who they are: TMDB keeps biographies for screen people, Wikipedia for
+  // everyone else.
+  const profile = screen
+    ? await tmdb.person(name).catch(() => null)
+    : await wiki.person(name, { hint: 'author' }).catch(() => null)
+
+  // What they made.
+  let works = []
+  if (screen) {
+    works = await tmdb.personWorks(name, type, { limit: 60 }).catch(() => [])
+  } else if (gbooks.hasKey()) {
+    works = await gbooks.byAuthor(name, { limit: 40, type }).catch(() => [])
+  }
+  if (!works.length && !screen) {
+    works = await ol.search('', { author: name, limit: 40, type }).catch(() => [])
+  }
+
+  // Where each one sits in a series, if anywhere.
+  const order = new Map()
+  if (!screen) {
+    const entity = await wikidata.findEntity(name, 'book').catch(() => null)
+    const listed = entity ? await wikidata.seriesByAuthor(entity.qid).catch(() => []) : []
+    for (const w of listed) {
+      if (w.series) order.set(normaliseTitle(w.title), { series: w.series, ordinal: w.ordinal })
+    }
+  } else {
+    for (const w of works) {
+      const collection = w.metadata?.collection
+      if (collection?.name) order.set(normaliseTitle(w.title), { series: collection.name, ordinal: null })
+    }
+  }
+
+  const owned = new Map(
+    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
+  )
+  const onList = new Set(
+    all("SELECT ifnull(type,'') type, title FROM recs WHERE status = 'open'")
+      .map((r) => `${r.type}|${normaliseTitle(r.title)}`),
+  )
+
+  const seen = new Set()
+  const clean = []
+  for (const w of works) {
+    if (!w?.title) continue
+    const key = normaliseTitle(w.title)
+    if (seen.has(key)) continue
+    if ((type === 'book' || type === 'audiobook') && bookNoise(w.title)) continue
+    seen.add(key)
+    const id = owned.get(`${type}|${key}`) ?? null
+    const place = order.get(key) || {}
+    clean.push({
+      type,
+      title: w.title,
+      year: w.year ?? null,
+      poster_url: w.poster_url ?? null,
+      creators: (w.creators || []).filter((c) => c.role !== 'Cast').slice(0, 2),
+      external_rating: w.external_rating ?? null,
+      series: place.series ?? null,
+      ordinal: place.ordinal ?? null,
+      work_id: id,
+      inLibrary: Boolean(id),
+      onList: onList.has(`${type}|${key}`),
+    })
+  }
+
+  /*
+   * Grouped into series, with the standalones gathered at the end. A series
+   * reads in its own order; everything else reads newest first.
+   */
+  const groups = new Map()
+  for (const w of clean) {
+    const key = w.series || ''
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(w)
+  }
+
+  const series = [...groups.entries()]
+    .filter(([key]) => key)
+    .map(([key, items]) => ({
+      name: key,
+      items: items.sort((a, b) => (a.ordinal ?? 99) - (b.ordinal ?? 99) || (a.year ?? 0) - (b.year ?? 0)),
+    }))
+    .sort((a, b) => b.items.length - a.items.length)
+
+  const standalone = (groups.get('') || []).sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+
+  res.json({
+    name: profile?.name || name,
+    bio: profile?.bio || null,
+    image: profile?.image || null,
+    url: profile?.url || null,
+    counts: { total: clean.length, yours: clean.filter((w) => w.inLibrary).length },
+    series,
+    standalone,
   })
 })
 

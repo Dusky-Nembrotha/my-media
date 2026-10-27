@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from './Icon'
 import { PosterArt, PosterSkeleton } from './Poster'
+import { Preview } from './Preview'
+import type { PreviewTarget } from './Preview'
 import { Empty } from './Modal'
+import { JustLogged } from './JustLogged'
+import type { LoggedThing } from './JustLogged'
 import { api } from '../lib/api'
 import { useApp } from '../lib/store'
 import { SECTION_META, creatorLine } from '../lib/format'
@@ -33,6 +37,9 @@ export function Suggestions({ type }: { type: MediaType }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [hidden, setHidden] = useState<string[]>([])
+  const [logged, setLogged] = useState<LoggedThing | null>(null)
+  const [preview, setPreview] = useState<PreviewTarget | null>(null)
+  const [sort, setSort] = useState<'match' | 'rating' | 'released'>('match')
   const [limit, setLimit] = useState(18)
   const [more, setMore] = useState(false)
 
@@ -46,7 +53,19 @@ export function Suggestions({ type }: { type: MediaType }) {
     else setLoading(true)
     try {
       const res = await api.get<RecResponse>(`/recommendations?type=${type}&limit=${want}${force ? '&force=1' : ''}`)
-      setData(res)
+      /*
+       * Asking for more must not rearrange what you are already looking at.
+       * The ranking is recomputed for the longer list and can shuffle near
+       * the margins, which made new picks appear above ones you had just
+       * read. Whatever is on screen keeps its place; the rest goes beneath.
+       */
+      setData((prev) => {
+        if (force || !prev?.picks?.length) return res
+        const byFingerprint = new Map(res.picks.map((p) => [p.fingerprint, p]))
+        const kept = prev.picks.map((p) => byFingerprint.get(p.fingerprint) ?? p)
+        const seen = new Set(kept.map((p) => p.fingerprint))
+        return { ...res, picks: [...kept, ...res.picks.filter((p) => !seen.has(p.fingerprint))] }
+      })
       setLimit(want)
       if (force) setHidden([])
     } catch (err) {
@@ -64,8 +83,13 @@ export function Suggestions({ type }: { type: MediaType }) {
         await api.post('/recommendations/save', { pick })
         toast(`${pick.title} added to ${meta.planned.toLowerCase()}`)
       } else if (what === 'log') {
-        await api.post('/recommendations/log', { pick })
-        toast(`Logged ${pick.title}`)
+        const res = await api.post<{ work_id: number; entry_id: number; consumed_on: string | null }>(
+          '/recommendations/log', { pick },
+        )
+        setLogged({
+          workId: res.work_id, entryId: res.entry_id, title: pick.title,
+          type: pick.type, consumedOn: res.consumed_on,
+        })
       } else {
         await api.post('/recommendations/dismiss', { fingerprint: pick.fingerprint, reason: 'not interested' })
       }
@@ -74,11 +98,31 @@ export function Suggestions({ type }: { type: MediaType }) {
     } catch (err) { toast((err as Error).message, 'error') } finally { setBusy(null) }
   }
 
-  const picks = (data?.picks ?? []).filter((p) => !hidden.includes(p.fingerprint))
+  /*
+   * The engine's own order is the best match; the others re-read that same
+   * list rather than asking for a different one, so nothing is recomputed
+   * and the picks stay the picks.
+   */
+  const ordered = (() => {
+    const list = (data?.picks ?? []).filter((p) => !hidden.includes(p.fingerprint))
+    if (sort === 'rating') return [...list].sort((a, b) => (b.external_rating ?? 0) - (a.external_rating ?? 0))
+    if (sort === 'released') return [...list].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+    return list
+  })()
+  const picks = ordered
   const needsTmdb = (type === 'film' || type === 'tv') && !settings.has_tmdb
 
   return (
     <>
+      {logged && <JustLogged thing={logged} onClose={() => setLogged(null)} />}
+      {preview && (
+        <Preview
+          target={preview}
+          onClose={() => setPreview(null)}
+          onLogged={(t) => { setPreview(null); setLogged(t) }}
+        />
+      )}
+
       <div className="u-spread" style={{ margin: '4px 0 14px' }}>
         <span className="u-sm u-mut">
           {loading
@@ -88,9 +132,16 @@ export function Suggestions({ type }: { type: MediaType }) {
               + `${data?.usingTmdb ? ' · TMDB' : ' · keyless sources'}`
               + `${data?.cached ? ' · cached' : ''}`}
         </span>
-        <button className="btn btn--sm" onClick={() => load(true, 18)} disabled={loading}>
-          <Icon name="refresh" size={14} /> {loading ? 'Thinking…' : 'Refresh'}
-        </button>
+        <div className="u-row u-wrap" style={{ gap: 8 }}>
+          <div className="chiprow">
+            {([['match', 'Best match'], ['rating', 'Best rated'], ['released', 'Newest']] as const).map(([v, label]) => (
+              <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>
+            ))}
+          </div>
+          <button className="btn btn--sm" onClick={() => load(true, 18)} disabled={loading}>
+            <Icon name="refresh" size={14} /> {loading ? 'Thinking…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {needsTmdb && (
@@ -123,9 +174,20 @@ export function Suggestions({ type }: { type: MediaType }) {
         <div className="recgrid">
           {picks.map((pick) => (
             <article key={pick.fingerprint} className="reccard">
-              <div className="reccard__art">
+              {/* The artwork opens the same sheet every other card does. */}
+              <button
+                type="button"
+                className="reccard__art poster__open"
+                onClick={() => setPreview({
+                  type: pick.type,
+                  title: pick.title,
+                  year: pick.year,
+                  creator: pick.creators?.[0]?.name ?? null,
+                })}
+                title={`What is ${pick.title}?`}
+              >
                 <PosterArt src={pick.poster_url} title={pick.title} type={pick.type} aspect={meta.aspect} />
-              </div>
+              </button>
               <div className="reccard__body">
                 <div className="u-col" style={{ gap: 3 }}>
                   <h3 style={{ fontSize: 15.5, letterSpacing: '-0.015em' }}>{pick.title}</h3>

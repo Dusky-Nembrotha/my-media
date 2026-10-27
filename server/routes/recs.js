@@ -155,14 +155,20 @@ router.post('/recommendations/log', async (req, res) => {
   }
   const { work, created } = upsertWork(seed)
   if (created || !work.poster_url) queueEnrichment([work.id])
-  run(
-    `INSERT INTO entries (user_id, work_id, status, rating, consumed_on, source) VALUES (?, ?, 'completed', ?, ?, 'recommendation')`,
-    currentUserId(req), work.id, req.body.rating ?? null, req.body.consumed_on === undefined ? today() : req.body.consumed_on,
+  const consumedOn = req.body.consumed_on === undefined ? today() : req.body.consumed_on
+  const stmt = run(
+    `INSERT INTO entries (user_id, work_id, status, rating, consumed_on, format, source)
+     VALUES (?, ?, 'completed', ?, ?, ?, 'recommendation')`,
+    currentUserId(req), work.id, req.body.rating ?? null, consumedOn,
+    ['book', 'audiobook', 'both'].includes(req.body.format) ? req.body.format
+      : (work.type === 'book' ? 'book' : null),
   )
   if (req.body.rec_id) {
     run("UPDATE recs SET status = 'done', acted_at = datetime('now'), work_id = ? WHERE id = ?", work.id, Number(req.body.rec_id))
   }
-  res.json({ ok: true, work_id: work.id })
+  // The entry id too, so whatever added it can offer a rating and a date
+  // without having to go and find the entry again.
+  res.json({ ok: true, work_id: work.id, entry_id: Number(stmt.lastInsertRowid), title: work.title, type: work.type, consumed_on: consumedOn })
 })
 
 router.get('/profile', (req, res) => {

@@ -176,3 +176,48 @@ export async function batchPageImages(titles) {
   }
   return out
 }
+
+/**
+ * A person, for the card that opens when you tap an author's name.
+ *
+ * Wikipedia's summary endpoint gives a portrait and an opening paragraph,
+ * which is exactly the amount anybody wants about an author before deciding
+ * whether to read more of them. A disambiguation page is no use, so those are
+ * refused rather than shown.
+ */
+export async function person(name, { hint = 'writer' } = {}) {
+  if (!name) return null
+  try {
+    const found = await fetchJson(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(`${name} ${hint}`)}`
+      + '&srlimit=3&format=json&origin=*',
+      { ttlSeconds: 60 * 60 * 24 * 30 },
+    )
+    /*
+     * Prefer the person's own article. A plain search for "Brandon Sanderson
+     * author" returns "Brandon Sanderson bibliography" first, which has no
+     * portrait and opens "This is the bibliography of…" — true, and useless.
+     */
+    const results = found?.query?.search || []
+    const unwanted = /bibliograph|filmograph|discograph|disambiguation|list of|awards/i
+    const want = String(name).toLowerCase()
+    const title = results.find((r) => r.title.toLowerCase() === want)?.title
+      || results.find((r) => !unwanted.test(r.title))?.title
+    if (!title) return null
+
+    const summary = await fetchJson(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      { ttlSeconds: 60 * 60 * 24 * 30 },
+    )
+    if (!summary || summary.type === 'disambiguation') return null
+
+    return {
+      name: summary.title || name,
+      bio: summary.extract || null,
+      image: summary.thumbnail?.source?.replace(/\/\d+px-/, '/400px-') || null,
+      url: summary.content_urls?.desktop?.page || null,
+    }
+  } catch {
+    return null
+  }
+}

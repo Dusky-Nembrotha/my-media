@@ -55,6 +55,7 @@ export const options = [
   { key: 'profile', label: 'Only this Plex profile (leave blank for all)', type: 'text', default: '' },
   { key: 'maxPages', label: 'Pages of history to read (500 watches each)', type: 'number', default: 20 },
   { key: 'includeRatings', label: 'Bring across your Plex star ratings', type: 'boolean', default: true },
+  { key: 'includeLibrary', label: 'Bring across everything on the server, not only what you have watched', type: 'boolean', default: true },
 ]
 
 /*
@@ -364,6 +365,69 @@ export async function sync({ config, tokens, options = {} }) {
         metadata: { source: 'plex' },
       })
     }
+  }
+
+  /*
+   * The whole shelf, not just the history.
+   *
+   * Watch history says what you have seen; the library says what you have.
+   * Plex knows both, and the library carries `lastViewedAt` — which means it
+   * can also date films you logged here from somewhere else without one.
+   *
+   * Anything never played is logged as still to watch rather than as watched,
+   * because owning a film is not seeing it. These rows are marked `merge` so
+   * they fold into an existing entry instead of making a second one.
+   */
+  if (options.includeLibrary !== false) {
+    try {
+      const sections = await call(config, tokens, '/library/sections')
+      for (const section of sections.Directory || []) {
+        if (section.type !== 'movie') continue
+        const data = await call(config, tokens, `/library/sections/${section.key}/all`, {
+          type: 1,
+          'X-Plex-Container-Size': 5000,
+        })
+        for (const item of data.Metadata || []) {
+          const cleaned = cleanTitle(item.title)
+          if (!cleaned.title) continue
+          const watched = Number(item.viewCount || 0) > 0 || Boolean(item.lastViewedAt)
+
+          if (!watched) {
+            /*
+             * Sitting on the server unplayed. That is a thing to watch, not a
+             * thing watched, so it goes on the list rather than into the
+             * diary — and the list is where the "To watch" tab reads from.
+             */
+            films.push(record({
+              kind: 'rec',
+              type: 'film',
+              title: cleaned.title,
+              year: item.year ?? cleaned.year ?? null,
+              recommender: 'On your Plex server',
+              external_key: keyFor('plex', 'shelf', [normaliseTitle(cleaned.title)]),
+            }))
+            continue
+          }
+
+          films.push(record({
+            type: 'film',
+            title: cleaned.title,
+            year: item.year ?? cleaned.year ?? null,
+            consumed_on: dayOf(item.lastViewedAt),
+            status: 'completed',
+            rating: starsOf(item.userRating),
+            metadata: { source: 'plex', plex_rating_key: item.ratingKey ?? null, on_server: true },
+            /*
+             * Fold into whatever is already logged rather than adding a
+             * parallel entry: the point is to fill in a date or a rating that
+             * is missing, not to claim a second viewing.
+             */
+            merge: true,
+            external_key: keyFor('plex', 'library', [normaliseTitle(cleaned.title)]),
+          }))
+        }
+      }
+    } catch { /* the history is still worth having on its own */ }
   }
 
   const records = [...films, ...rollUpEpisodes(episodeRows, { source: 'plex' })]
