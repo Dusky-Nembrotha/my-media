@@ -618,17 +618,56 @@ router.get('/works/:id/series', async (req, res) => {
 
   if (!parts.length) return res.json({ name: null, parts: [] })
 
-  // Mark what is already yours, and link straight to it.
+  /*
+   * Anything already yours is shown as yours: your cover, your rating, how
+   * many times you have been through it. A series row full of blank cards
+   * next to the same books with covers elsewhere on the page looks broken.
+   */
   const owned = new Map(
-    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
+    all(`SELECT w.id, w.type, w.title, w.poster_url,
+                (SELECT max(e.rating) FROM entries e WHERE e.work_id = w.id) rating,
+                (SELECT count(*) FROM entries e WHERE e.work_id = w.id) entry_count,
+                (SELECT max(e.liked) FROM entries e WHERE e.work_id = w.id) liked
+           FROM works w`)
+      .map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w]),
   )
-  res.json({
-    name,
-    parts: parts.map((p) => {
-      const id = owned.get(`${p.type}|${normaliseTitle(p.title)}`) ?? null
-      return { ...p, work_id: id, inLibrary: Boolean(id), isThisOne: id === work.id }
-    }),
+
+  const resolved = parts.map((p) => {
+    const mine = owned.get(`${p.type}|${normaliseTitle(p.title)}`)
+    return {
+      ...p,
+      poster_url: mine?.poster_url || p.poster_url || null,
+      rating: mine?.rating ?? null,
+      entry_count: mine?.entry_count ?? 0,
+      liked: Boolean(mine?.liked),
+      work_id: mine?.id ?? null,
+      inLibrary: Boolean(mine),
+      isThisOne: mine?.id === work.id,
+    }
   })
+
+  /*
+   * Books coming from Wikidata arrive with no artwork at all. Look up covers
+   * for the ones that are not yours, a few at a time — a series is rarely
+   * more than a dozen, and the results are cached for a fortnight.
+   */
+  const needArt = resolved.filter((p) => !p.poster_url && (p.type === 'book' || p.type === 'audiobook'))
+  if (needArt.length) {
+    const author = work.creators.find((c) => c.role === 'Author' || !c.role)?.name
+    for (let i = 0; i < needArt.length; i += 4) {
+      const batch = needArt.slice(i, i + 4)
+      await Promise.all(batch.map(async (p) => {
+        const hit = (await ol.search(p.title, { limit: 3, type: 'book', author }).catch(() => []))
+          .find((h) => normaliseTitle(h.title) === normaliseTitle(p.title) && h.poster_url)
+        if (hit) {
+          p.poster_url = hit.poster_url
+          p.year = p.year ?? hit.year
+        }
+      }))
+    }
+  }
+
+  res.json({ name, parts: resolved })
 })
 
 /**

@@ -1137,3 +1137,17 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 }
 .hotadd { margin-top: 6px; width: 100%; justify-content: center; }
 .poster.is-mine .poster__frame { outline: 1px solid var(--accent-line); outline-offset: 1px; }
+
+/* A synopsis is clamped to ten lines until asked to open. */
+.synopsis {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 10;
+  line-clamp: 10;
+  overflow: hidden;
+}
+.synopsis.is-open { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { Stars } from '../components/Stars'
@@ -23,6 +23,8 @@ export function WorkPage() {
   // The hero takes its colour from the artwork it is sitting behind.
   const [tint, setTint] = useState<{ base: string; accent: string } | null>(null)
   const [pickingArt, setPickingArt] = useState(false)
+  // Titles the series row is already showing, so they are not repeated below.
+  const [inSeries, setInSeries] = useState<Set<number>>(new Set())
   const poster = data?.work?.poster_url ?? null
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export function WorkPage() {
   if (!data) return <div className="page"><p className="u-mut">Could not load that title.</p></div>
 
   const { work, related } = data
+  const relatedElsewhere = related.filter((w) => !inSeries.has(w.id))
   const meta = SECTION_META[work.type]
   const latest = work.entries[0]
   const cast = work.creators.filter((c) => c.role === 'Cast')
@@ -185,18 +188,15 @@ export function WorkPage() {
 
       <div className="workbody">
         <div className="workbody__main">
-          {work.overview && (
-            <section className="card card--pad-lg">
-              <div className="u-caps" style={{ marginBottom: 8 }}>Synopsis</div>
-              <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink-2)' }}>{work.overview}</p>
-            </section>
-          )}
+          {work.overview && <Synopsis text={work.overview} />}
 
-          <SeriesRow workId={work.id} />
+          <SeriesRow workId={work.id} onTitles={setInSeries} />
 
-          {related.length > 0 && (
+          {/* Whatever the series row already showed has no business appearing
+              again two rows further down. */}
+          {relatedElsewhere.length > 0 && (
             <Row title="More like this in your library" cardWidth={140}>
-              {related.map((w) => <PosterCard key={w.id} work={w} aspect={SECTION_META[w.type].aspect} />)}
+              {relatedElsewhere.map((w) => <PosterCard key={w.id} work={w} aspect={SECTION_META[w.type].aspect} />)}
             </Row>
           )}
         </div>
@@ -543,6 +543,9 @@ interface SeriesPart {
   ordinal?: number | null
   poster_url: string | null
   creators: { role?: string; name: string }[]
+  rating?: number | null
+  entry_count?: number
+  liked?: boolean
   work_id: number | null
   inLibrary: boolean
   isThisOne: boolean
@@ -555,9 +558,15 @@ interface SeriesPart {
  * added where they stand, which is the whole point — finding the second Dune
  * film should not mean going back to search and typing it out.
  */
-function SeriesRow({ workId }: { workId: number }) {
+function SeriesRow({ workId, onTitles }: { workId: number; onTitles: (ids: Set<number>) => void }) {
   const { toast, refresh } = useApp()
   const { data } = useFetch<{ name: string | null; parts: SeriesPart[] }>(`/works/${workId}/series`, [workId])
+
+  // Tell the page which of its own titles this row has covered.
+  useEffect(() => {
+    const shown = (data?.parts ?? []).filter((p) => p.work_id).map((p) => p.work_id as number)
+    onTitles(new Set((data?.name && shown.length > 1) ? shown : []))
+  }, [data])
   const [added, setAdded] = useState<Record<string, true>>({})
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -584,6 +593,7 @@ function SeriesRow({ workId }: { workId: number }) {
         const meta = SECTION_META[part.type]
         const label = part.ordinal ? `${part.ordinal}. ${part.title}` : part.title
         if (part.work_id) {
+          const repeat = (part.entry_count ?? 0) > 1
           return (
             <Link
               key={part.title}
@@ -591,7 +601,15 @@ function SeriesRow({ workId }: { workId: number }) {
               className={`poster${part.isThisOne ? ' is-current' : ''}`}
               title={part.isThisOne ? `${part.title} — the one you are looking at` : part.title}
             >
-              <PosterArt src={part.poster_url} title={part.title} type={part.type} aspect={meta.aspect} />
+              <PosterArt
+                src={part.poster_url}
+                title={part.title}
+                type={part.type}
+                aspect={meta.aspect}
+                rating={part.rating ?? null}
+                liked={part.liked}
+                flag={repeat ? `${part.entry_count}×` : null}
+              />
               <div className="poster__meta">
                 <div className="poster__title">{label}</div>
                 <div className="poster__sub u-trunc">{part.isThisOne ? 'This one' : (part.year ?? 'In your library')}</div>
@@ -620,5 +638,43 @@ function SeriesRow({ workId }: { workId: number }) {
         )
       })}
     </Row>
+  )
+}
+
+
+/**
+ * A synopsis, folded away if it runs long.
+ *
+ * Some are two lines and some are two pages, and a page of plot summary
+ * pushes everything worth looking at off the screen. Ten lines is enough to
+ * know whether you want the rest.
+ */
+function Synopsis({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const bodyRef = useRef<HTMLParagraphElement>(null)
+  const [overflows, setOverflows] = useState(false)
+
+  // Whether it is actually too long depends on how it wraps, which only the
+  // browser knows — so ask it, and ask again if the width changes.
+  useEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 4)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [text])
+
+  return (
+    <section className="card card--pad-lg">
+      <div className="u-caps" style={{ marginBottom: 8 }}>Synopsis</div>
+      <p ref={bodyRef} className={`synopsis${open ? ' is-open' : ''}`}>{text}</p>
+      {(overflows || open) && (
+        <button className="linkish u-sm" style={{ marginTop: 8 }} onClick={() => setOpen((v) => !v)}>
+          {open ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </section>
   )
 }

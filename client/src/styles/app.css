@@ -646,6 +646,18 @@ kbd {
   .shell { grid-template-columns: minmax(0, 1fr); }
   .page { padding-bottom: 86px; }
   .grid { --card-w: 108px; }
+  /*
+   * Three to a row on a phone. The carousels are given a card width in pixels
+   * by whoever renders them, which is right on a desktop and too wide here —
+   * so take whichever is smaller, theirs or a third of the screen. Two and a
+   * half cards is a worse row than three whole ones.
+   */
+  .row__track {
+    grid-auto-columns: min(
+      var(--card-w, 152px),
+      calc((100vw - 2 * var(--gutter) - 28px) / 3)
+    );
+  }
   .searchbtn { min-width: 0; width: 36px; padding: 0; justify-content: center; }
   .searchbtn span, .searchbtn kbd { display: none; }
   .log-label { display: none; }
