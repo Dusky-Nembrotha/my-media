@@ -925,6 +925,69 @@ const fpOf = (c) => c.fingerprint || `${c.type}|${normaliseTitle(c.title)}`
 const CROWD_WEIGHT = 1.6
 
 /*
+ * The angles a suggestion can be found from.
+ *
+ * Refreshing used to re-run one algorithm and push the last list down the
+ * order, which turns a list over without ever changing its mind: the same
+ * reasoning, applied twice, finds much the same things. Each refresh now
+ * moves to the next angle, which re-weights what the engine is allowed to
+ * reason from — so one pass answers "who do you keep coming back to", the
+ * next "what do people with your ratings rate highly", the next "what sits
+ * beside the things you loved". The candidate pool is five hundred wide; the
+ * difference between these lists is which of it rises.
+ *
+ *   kind   multiplies a kind of evidence (creator, genre, keyword, decade)
+ *   crowd  multiplies the collaborative model's say
+ *   links  multiplies the "adjacent to something you rated" bonus
+ *
+ * A negative multiplier inverts the evidence, which is how the last angle
+ * looks for the decades and languages you have *not* been reading in.
+ */
+const ANGLES = [
+  {
+    key: 'taste',
+    label: 'across your taste',
+    blurb: 'Everything the engine knows about you, weighed together.',
+    kind: {}, crowd: 1, links: 1,
+  },
+  {
+    key: 'people',
+    label: 'by people you return to',
+    blurb: 'Led by the directors, writers and authors you keep going back to.',
+    kind: { creator: 2.2, genre: 0.5, keyword: 0.5, decade: 0.4 }, crowd: 0.5, links: 1.4,
+  },
+  {
+    key: 'crowd',
+    label: 'from people who rate like you',
+    blurb: 'Led by what people whose ratings match yours scored highly.',
+    kind: { creator: 0.45, genre: 0.5, keyword: 0.5, decade: 0.3 }, crowd: 2, links: 0.6,
+  },
+  {
+    key: 'adjacent',
+    label: 'next to things you loved',
+    blurb: 'Led by what sits closest to the titles you rated highest.',
+    kind: { keyword: 1.9, genre: 1.3, creator: 0.6, decade: 0.5 }, crowd: 0.8, links: 2.3,
+  },
+  {
+    key: 'unexplored',
+    label: 'from corners you have not been to',
+    blurb: 'Your genres, but from the decades and languages you have missed.',
+    kind: { genre: 1.3, keyword: 1.1, creator: 0.5, decade: -1, lang: -1 }, crowd: 0.8, links: 0.7,
+  },
+]
+
+const angleByKey = (key) => ANGLES.find((a) => a.key === key) || ANGLES[0]
+/*
+ * The next angle round. A list with no angle recorded was built before there
+ * were any, by the balanced reasoning that is now the first of them — so it
+ * counts as that one, and refreshing moves off it rather than back onto it.
+ */
+const nextAngle = (key) => {
+  const i = ANGLES.findIndex((a) => a.key === key)
+  return ANGLES[((i < 0 ? 0 : i) + 1) % ANGLES.length]
+}
+
+/*
  * Diversity. The old penalties were too small to matter — a twentieth of a
  * point per repeated genre, nothing at all for two picks resting on the same
  * film of yours — so a list could be ten crime films that all traced back to
@@ -963,7 +1026,10 @@ function seedsOf(c) {
 }
 
 /** Score, explain and diversify. */
-export function rank(candidates, profile, { limit = 12, shortlistOnly = false, crowd = null, shownBefore = null } = {}) {
+export function rank(candidates, profile, {
+  limit = 12, shortlistOnly = false, crowd = null, shownBefore = null,
+  skipShown = false, angle = ANGLES[0],
+} = {}) {
   const skip = excluded()
   const distaste = buildDistaste()
   const merged = new Map()
@@ -1001,8 +1067,14 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
         : slot.types.some((t) => sameFamily(t, c.type)) ? 0.7 : 0.4
       // Thin evidence can colour a recommendation but must not choose it.
       const support = slot.n >= MIN_SUPPORT ? 1 : 0.25
+      /*
+       * The angle's say over this kind of evidence. A negative multiplier
+       * inverts it, which is what makes "corners you have not been to" look
+       * for the decades you have been avoiding rather than the ones you live in.
+       */
+      const lens = angle.kind?.[kind] ?? 1
       const contribution = slot.score * slot.confidence * (KIND_WEIGHT[kind] ?? 0.4)
-        * weight * crossMedia * support
+        * weight * crossMedia * support * lens
       contributions.push({ key, slot, contribution })
     }
     contributions.sort((a, b) => b.contribution - a.contribution)
@@ -1040,7 +1112,7 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
           ...s,
           because: crowd.model.because(crowd.user, crowdId).map((b) => ({ ...b, title: crowd.titleOf.get(b.item_id) })),
         }
-        score += CROWD_WEIGHT * s.score
+        score += CROWD_WEIGHT * (angle.crowd ?? 1) * s.score
 
         /*
          * The model predicting three stars for someone who averages four is
@@ -1081,7 +1153,7 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
       const unratedLift = 0.15 * (profile.implicitStrength?.[c.type] || 1)
       const lift = links.reduce((a, v) => a + (v.seed.rating != null ? Math.max(0, v.seed.rating - mean) : unratedLift), 0) / links.length
       const breadth = Math.sqrt(links.length)
-      score += 0.16 * breadth * (0.5 + lift)
+      score += 0.16 * (angle.links ?? 1) * breadth * (0.5 + lift)
     }
 
     /*
@@ -1104,8 +1176,16 @@ export function rank(candidates, profile, { limit = 12, shortlistOnly = false, c
     if (c.popularity) score += 0.04 * Math.min(2, Math.log10(1 + c.popularity))
     if (!c.poster_url) score -= 0.08
 
-    // Already offered recently: still eligible, but it has had its turn.
-    if (shownBefore?.has(fpOf(c))) score -= 0.45
+    /*
+     * Already offered recently. When there is enough left in the pool to
+     * build a whole list without them, a refresh drops them outright — a
+     * refresh that returns half the same titles is not one. Otherwise they
+     * are merely pushed down, so a thin library still gets a full list.
+     */
+    if (shownBefore?.has(fpOf(c))) {
+      if (skipShown) continue
+      score -= 0.45
+    }
 
     // And things built like the ones you have refused.
     score -= distastePenalty(c, distaste, profile)
@@ -1308,10 +1388,27 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
    */
   const shownBefore = new Set()
   if (force) {
-    for (const row of all('SELECT payload FROM rec_cache WHERE type = ? ORDER BY id DESC LIMIT 3', type)) {
+    // One list per angle: a full turn of the rotation should not repeat itself.
+    for (const row of all('SELECT payload FROM rec_cache WHERE type = ? ORDER BY id DESC LIMIT ?', type, ANGLES.length)) {
       for (const fp of json(row.payload, {})?.picks?.map((p) => p.fingerprint) || []) shownBefore.add(fp)
     }
   }
+
+  /*
+   * Refreshing moves to the next angle; asking for more of the list you are
+   * already reading keeps the one it was built with, or the whole thing would
+   * re-reason itself underneath you.
+   */
+  const lastAngle = json(cached?.payload, null)?.angle
+  const angle = force ? nextAngle(lastAngle) : angleByKey(lastAngle)
+
+  /*
+   * A refresh deliberately does *not* widen the net. Casting further afield
+   * was measured at fifteen seconds for five extra book candidates — Open
+   * Library is the bottleneck and asking it more questions barely moves the
+   * pool, while putting the request within range of the proxy's patience.
+   * The angle below is what makes a refresh different; the pool stays put.
+   */
 
   // Worked out once and used twice: to find candidates, and to score them.
   const crowd = crowdUser(type)
@@ -1339,15 +1436,46 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
    * rating-driven score buries two hundred places down, and a shortlist of
    * the seventy highest scores would never contain them.
    */
-  const shortlist = rank(candidates, profile, { limit: Math.max(limit * 5, 60), crowd, shownBefore })
+  /*
+   * The shortlist only demotes what has been shown before, so those titles
+   * stay hydrated and available. The final cut drops them outright — a
+   * refresh that hands back half the same list is not a refresh — but if
+   * dropping them leaves the page short, they come back in, merely pushed
+   * down. A full page with a couple of familiar faces beats four titles.
+   */
+  const shortlist = rank(candidates, profile, {
+    limit: Math.max(limit * 5, 60), crowd, shownBefore, angle,
+  })
   const detailed = await hydrateDetails(type, shortlist)
-  const picks = await hydrateArtwork(await hydrateBooks(rank(detailed, profile, { limit, crowd, shownBefore })))
+
+  const ranked = rank(detailed, profile, { limit, crowd, shownBefore, skipShown: force, angle })
+  if (force && ranked.length < limit) {
+    /*
+     * Top up rather than start again: everything genuinely new keeps the top
+     * of the list, and familiar titles only fill the space underneath it. An
+     * angle that finds four unseen books should show those four first, not be
+     * replaced wholesale by a list that is mostly repeats.
+     */
+    const seen = new Set(ranked.map(fpOf))
+    for (const c of rank(detailed, profile, { limit: limit * 2, crowd, shownBefore, angle })) {
+      if (ranked.length >= limit) break
+      if (seen.has(fpOf(c))) continue
+      seen.add(fpOf(c))
+      ranked.push(c)
+    }
+  }
+  const picks = await hydrateArtwork(await hydrateBooks(ranked))
 
   const payload = {
     type,
     fingerprint,
     computed_at: new Date().toISOString(),
     candidateCount: candidates.length,
+    // Which way the engine was looking, so the page can say so and the next
+    // refresh knows where to go next.
+    angle: angle.key,
+    angleLabel: angle.label,
+    angleBlurb: angle.blurb,
     usingTmdb: tmdb.hasKey(),
     usingCrowd: Boolean(crowd),
     // How many of your own ratings the crowd model could place you by.
@@ -1381,10 +1509,11 @@ export async function recommend(type, { limit = 12, force = false, breadth = 1 }
     })),
   }
 
-  // Keep the last few lists so "show me something else" has a memory.
+  // Keep one list per angle, so a full turn of the rotation has a memory of
+  // everything it has already put in front of you.
   run(
     `DELETE FROM rec_cache
-      WHERE type = ? AND id NOT IN (SELECT id FROM rec_cache WHERE type = ? ORDER BY id DESC LIMIT 2)`,
+      WHERE type = ? AND id NOT IN (SELECT id FROM rec_cache WHERE type = ? ORDER BY id DESC LIMIT ${ANGLES.length})`,
     type, type,
   )
   run(

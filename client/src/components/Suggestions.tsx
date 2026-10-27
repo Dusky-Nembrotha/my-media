@@ -22,6 +22,10 @@ interface RecResponse {
   usingTmdb?: boolean
   usingCrowd?: boolean
   crowdSize?: number
+  /** Which way the engine was looking this time round. */
+  angle?: string
+  angleLabel?: string
+  angleBlurb?: string
   candidateCount?: number
   computed_at?: string
 }
@@ -170,10 +174,11 @@ export function Suggestions({ type }: { type: MediaType }) {
       )}
 
       <div className="u-spread" style={{ margin: '4px 0 14px' }}>
-        <span className="u-sm u-mut">
+        <span className="u-sm u-mut" title={data?.angleBlurb || undefined}>
           {loading
             ? 'Working out what you would like…'
-            : `${picks.length} from ${data?.candidateCount ?? 0} candidates`
+            : `${picks.length}${data?.angleLabel ? ` ${data.angleLabel}` : ''}`
+              + ` · from ${data?.candidateCount ?? 0} candidates`
               + `${data?.usingCrowd ? ` · placed by ${(data.crowdSize ?? 0).toLocaleString('en-GB')} of your ratings` : ''}`
               + `${data?.usingTmdb ? ' · TMDB' : ' · keyless sources'}`
               + `${data?.cached ? ' · cached' : ''}`}
@@ -184,7 +189,12 @@ export function Suggestions({ type }: { type: MediaType }) {
               <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>
             ))}
           </div>
-          <button className="btn btn--sm" onClick={() => load(true, 18)} disabled={loading}>
+          <button
+            className="btn btn--sm"
+            onClick={() => load(true, PAGE)}
+            disabled={loading}
+            title="Look again from a different angle"
+          >
             <Icon name="refresh" size={14} /> {loading ? 'Thinking…' : 'Refresh'}
           </button>
         </div>
