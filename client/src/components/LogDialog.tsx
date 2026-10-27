@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal } from './Modal'
 import { Stars } from './Stars'
+import { ArtworkPicker } from './ArtworkPicker'
 import { Icon } from './Icon'
 import { artworkUrl } from '../lib/img'
 import { PosterArt } from './Poster'
 import { api, qs } from '../lib/api'
 import { useApp } from '../lib/store'
-import { SECTION_META, TYPE_ORDER, creatorLine } from '../lib/format'
+import { SECTION_META, TYPE_ORDER, creatorLine, fmtDate } from '../lib/format'
 import type { MediaType, ProviderHit } from '../lib/types'
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
@@ -33,11 +34,18 @@ export function LogDialog() {
   const [typeFilter, setTypeFilter] = useState<MediaType | 'all'>('all')
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
+  // Which query the results in `hits` belong to. Without this, an empty list
+  // left over from a previous keystroke reads as "nothing found" for whatever
+  // is in the box now — which is how a perfectly good search looked broken.
+  const [hitsFor, setHitsFor] = useState('')
   const [searching, setSearching] = useState(false)
   const [chosen, setChosen] = useState<Hit | null>(null)
   const [manualType, setManualType] = useState<MediaType>('film')
   const [byHand, setByHand] = useState(false)
   const [saving, setSaving] = useState(false)
+  // A cover chosen here, overriding whatever the provider picked.
+  const [cover, setCover] = useState<string | null>(null)
+  const [pickingArt, setPickingArt] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const seq = useRef(0)
 
@@ -50,6 +58,8 @@ export function LogDialog() {
   const [repeat, setRepeat] = useState(false)
   const [liked, setLiked] = useState(false)
   const [progress, setProgress] = useState('')
+  // Read it, listened to it, or some of each. Only books are asked.
+  const [format, setFormat] = useState<'book' | 'audiobook' | 'both'>('book')
 
   // watchlist fields
   const [recommender, setRecommender] = useState('')
@@ -63,9 +73,12 @@ export function LogDialog() {
     if (!logTarget) return
     setMode(logTarget.kind === 'blank' && logTarget.mode === 'want' ? 'want' : 'log')
     setRating(null); setDate(todayIso()); setNoDate(false); setStatus('completed')
-    setReview(''); setRepeat(false); setLiked(false); setProgress('')
+    setReview(''); setRepeat(false); setLiked(false); setProgress(''); setFormat('book')
     setRecommender(''); setNote(''); setSourceUrl(''); setPriority(1)
-    setHits([]); setQuery(''); setByHand(false)
+    setHits([]); setHitsFor(''); setByHand(false); setCover(null); setPickingArt(false)
+    // Clear the box only when there is nothing in it worth keeping: the focus
+    // call below is async, so a fast typist can start before this lands.
+    setQuery((q) => (logTarget.kind === 'blank' ? '' : q))
 
     if (logTarget.kind === 'work') {
       setChosen(null)
@@ -88,7 +101,7 @@ export function LogDialog() {
   useEffect(() => {
     if (!logTarget || logTarget.kind !== 'blank' || chosen) return
     const q = query.trim()
-    if (q.length < 2) { setHits([]); setSearching(false); return }
+    if (q.length < 2) { setHits([]); setHitsFor(''); setSearching(false); return }
     const mine = ++seq.current
     setSearching(true)
     const t = setTimeout(async () => {
@@ -97,15 +110,26 @@ export function LogDialog() {
         ...res.local.map((l) => ({ ...l, provider: 'library', inLibrary: true, overview: null, genres: l.genres || [] })),
         ...(res.remote ?? []),
       ].slice(0, 12) as Hit[]
+      // The local pass is instant and paints first; the providers follow.
       try {
         const quick = await api.get<{ local: any[] }>(`/search${qs({ ...scope, remote: 0 })}`)
-        if (seq.current === mine) setHits(shape(quick))
+        if (seq.current === mine && quick.local.length) {
+          setHits(shape(quick))
+          setHitsFor(q)
+        }
       } catch { /* keep going */ }
       if (seq.current !== mine) return
       try {
         const res = await api.get<{ remote: ProviderHit[]; local: any[] }>(`/search${qs(scope)}`)
-        if (seq.current === mine) setHits(shape(res))
-      } catch { /* leave the quick results in place */ } finally {
+        if (seq.current === mine) {
+          setHits(shape(res))
+          setHitsFor(q)
+        }
+      } catch {
+        // Leave whatever the local pass found, but do not claim we looked
+        // everywhere and found nothing.
+        if (seq.current === mine) setHitsFor('')
+      } finally {
         if (seq.current === mine) setSearching(false)
       }
     }, 200)
@@ -115,24 +139,46 @@ export function LogDialog() {
   const target = useMemo(() => {
     if (byHand && query.trim()) {
       return {
-        title: query.trim(), year: null, poster_url: null,
+        title: query.trim(), year: null, release_date: null, poster_url: null,
         type: manualType, creators: [], genres: [],
       }
     }
     if (existingWork) {
       return {
-        title: existingWork.title, year: existingWork.year, poster_url: existingWork.poster_url,
+        title: existingWork.title, year: existingWork.year,
+        release_date: existingWork.release_date ?? null, poster_url: existingWork.poster_url,
         type: existingWork.type, creators: existingWork.creators, genres: existingWork.genres,
       }
     }
     if (chosen) {
       return {
-        title: chosen.title, year: chosen.year, poster_url: chosen.poster_url,
+        title: chosen.title, year: chosen.year,
+        release_date: chosen.release_date ?? null, poster_url: chosen.poster_url,
         type: chosen.type, creators: chosen.creators, genres: chosen.genres,
       }
     }
     return null
   }, [existingWork, chosen, byHand, query, manualType])
+
+  /*
+   * "I saw it when it came out" is a common thing to want to record, and far
+   * quicker to tap than to scroll a date picker back thirty years.
+   *
+   * A full release date is used as-is. Where only the year is known — Open
+   * Library gives a first-publish year and nothing more — the chip says so and
+   * uses the 1st of January, which is the honest reading of "sometime in 1987".
+   */
+  const releaseDate = useMemo(() => {
+    const raw = target?.release_date
+    if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return { iso: raw, label: fmtDate(raw) || raw, exact: true }
+    }
+    const year = target?.year
+    if (year && year > 1800 && year <= new Date().getFullYear() + 1) {
+      return { iso: `${year}-01-01`, label: String(year), exact: false }
+    }
+    return null
+  }, [target])
 
   if (!logTarget) return null
 
@@ -144,13 +190,13 @@ export function LogDialog() {
     if (chosen && !chosen.inLibrary) {
       return {
         type: chosen.type, title: chosen.title, year: chosen.year, creators: chosen.creators,
-        genres: chosen.genres, overview: chosen.overview, poster_url: chosen.poster_url,
+        genres: chosen.genres, overview: chosen.overview, poster_url: cover ?? chosen.poster_url,
         runtime: chosen.runtime, pages: chosen.pages, tmdb_id: chosen.tmdb_id, imdb_id: chosen.imdb_id,
         isbn: chosen.isbn, olid: chosen.olid, itunes_id: chosen.itunes_id, mbid: chosen.mbid,
         metadata: chosen.metadata,
       }
     }
-    return { type: manualType, title: query.trim() }
+    return { type: manualType, title: query.trim(), poster_url: cover ?? null }
   }
 
   async function save() {
@@ -163,7 +209,7 @@ export function LogDialog() {
           type: effectiveType,
           year: target?.year ?? null,
           creators: target?.creators ?? [],
-          poster_url: target?.poster_url ?? null,
+          poster_url: cover ?? target?.poster_url ?? null,
           recommender: recommender.trim() || null,
           note: note.trim() || null,
           source_url: sourceUrl.trim() || null,
@@ -185,6 +231,7 @@ export function LogDialog() {
         liked,
         status,
         progress: progress.trim() || null,
+        format: effectiveType === 'book' ? format : null,
       }
       if (existingWork) payload.work_id = existingWork.id
       else if (chosen?.inLibrary && chosen.id) payload.work_id = chosen.id
@@ -208,7 +255,7 @@ export function LogDialog() {
       ? 'Pick something first'
       : mode === 'want'
         ? 'Add to my list'
-        : `Log as ${meta.verb.toLowerCase()}`
+        : `${meta.verb} it`
 
   return (
     <Modal
@@ -226,6 +273,21 @@ export function LogDialog() {
         </>
       }
     >
+      {pickingArt && target && (
+        <ArtworkPicker
+          workId={existingWork?.id ?? (chosen?.inLibrary ? chosen.id : undefined)}
+          unsaved={existingWork || chosen?.inLibrary ? undefined : {
+            type: target.type,
+            title: target.title,
+            creator: target.creators?.[0]?.name ?? null,
+            tmdb_id: chosen?.tmdb_id ?? null,
+            mbid: chosen?.mbid ?? null,
+          }}
+          onClose={() => setPickingArt(false)}
+          onChosen={(poster) => setCover(poster)}
+        />
+      )}
+
       <div className="sheet__body">
         {/* What am I doing with this? Everything below follows from the answer. */}
         <div className="modeswitch" role="tablist">
@@ -264,12 +326,15 @@ export function LogDialog() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
                 {searching && <span className="spinner" aria-label="Searching" />}
               </div>
               <span className="field__hint">
                 {typeFilter === 'all'
-                  ? 'Searching films, TV, books, audiobooks and music at once.'
+                  ? 'Searching films, TV, books and music at once.'
                   : `Searching ${SECTION_META[typeFilter].label.toLowerCase()} only.`}
               </span>
             </div>
@@ -310,7 +375,7 @@ export function LogDialog() {
               </div>
             )}
 
-            {query.trim().length >= 2 && !searching && hits.length === 0 && (
+            {query.trim().length >= 2 && !searching && hits.length === 0 && hitsFor === query.trim() && (
               <div className="u-col" style={{ gap: 9 }}>
                 <p className="u-sm u-mut" style={{ margin: 0 }}>
                   Nothing found for “{query.trim()}”. Add it by hand instead?
@@ -353,11 +418,13 @@ export function LogDialog() {
                 {target.year && <span className="u-xs u-mut u-tnum">{target.year}</span>}
               </span>
               {creatorLine(target.creators, 2) && <span className="u-sm u-mut u-trunc">{creatorLine(target.creators, 2)}</span>}
-              {!existingWork && (
-                <button className="btn btn--sm btn--ghost" style={{ alignSelf: 'flex-start', marginTop: 2 }} onClick={() => { setChosen(null); setByHand(false) }}>
-                  <Icon name="refresh" size={13} /> Pick something else
-                </button>
-              )}
+              <button
+                className="btn btn--sm btn--ghost"
+                style={{ alignSelf: 'flex-start', marginTop: 2 }}
+                onClick={() => setPickingArt(true)}
+              >
+                <Icon name="pencil" size={13} /> Change cover
+              </button>
             </div>
           </div>
         )}
@@ -394,9 +461,38 @@ export function LogDialog() {
             </div>
 
             <div className="chiprow">
+              {releaseDate && (
+                <button
+                  className={`chip${!noDate && date === releaseDate.iso ? ' is-on' : ''}`}
+                  onClick={() => { setNoDate(false); setDate(releaseDate.iso) }}
+                  title={`Set the date to ${releaseDate.label}`}
+                >
+                  <Icon name="calendar" size={13} /> {releaseDate.exact ? 'On release' : 'Release year'} · {releaseDate.label}
+                </button>
+              )}
               <button className={`chip${noDate ? ' is-on' : ''}`} onClick={() => setNoDate((v) => !v)}>
                 <Icon name="clock" size={13} /> Date unknown
               </button>
+              <button
+                className={`chip${!noDate && date === todayIso() ? ' is-on' : ''}`}
+                onClick={() => { setNoDate(false); setDate(todayIso()) }}
+              >
+                <Icon name="check" size={13} /> Today
+              </button>
+              {effectiveType === 'book' && (
+                <span className="formatpick">
+                  {([['book', 'Read'], ['audiobook', 'Listened'], ['both', 'Both']] as const).map(([v, label]) => (
+                    <button
+                      key={v}
+                      className={`chip${format === v ? ' is-on' : ''}`}
+                      onClick={() => setFormat(v)}
+                      title={v === 'both' ? 'Read some and listened to some' : `You ${label.toLowerCase()} it`}
+                    >
+                      <Icon name={v === 'audiobook' ? 'headphones' : 'book'} size={13} /> {label}
+                    </button>
+                  ))}
+                </span>
+              )}
               <button className={`chip${repeat ? ' is-on' : ''}`} onClick={() => setRepeat((v) => !v)}>
                 <Icon name="repeat" size={13} /> {effectiveType === 'book' || effectiveType === 'audiobook' ? 'Reread' : 'Rewatch'}
               </button>

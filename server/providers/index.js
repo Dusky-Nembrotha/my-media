@@ -5,9 +5,11 @@ import { cleanSubjects } from './openlibrary.js'
 import * as mb from './musicbrainz.js'
 import * as tvmaze from './tvmaze.js'
 import * as wiki from './wikipedia.js'
+import * as wikidata from './wikidata.js'
+import * as omdb from './omdb.js'
 import { normaliseTitle, uniqueBy } from '../lib/util.js'
 
-export { tmdb, itunes, ol, mb, tvmaze, wiki }
+export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb }
 
 const fp = (c) => `${c.type}|${normaliseTitle(c.title)}|${c.year || ''}`
 
@@ -27,6 +29,86 @@ export function providersFor(type) {
     case 'game': return ['wikipedia']
     default: return []
   }
+}
+
+/**
+ * Run the provider calls in parallel but don't let the slowest decide how long
+ * a search takes. The first provider for each type is the authoritative one;
+ * the rest fill gaps. So once the primary has answered with a useful number of
+ * results we stop waiting, and in any case we stop at the deadline.
+ *
+ * Nothing is lost by giving up early: each provider caches its own response, so
+ * the next keystroke — or the next search for the same thing — includes it.
+ */
+function gather(jobs, { deadline = 1400, enough = 6 } = {}) {
+  if (!jobs.length) return Promise.resolve([])
+  return new Promise((resolve) => {
+    // Results are kept per job and concatenated in job order, never in the
+    // order they happen to arrive. The providers are listed best-first for a
+    // reason, and the fastest one is not the most trustworthy one.
+    const slots = jobs.map(() => [])
+    let settled = 0
+    let count = 0
+    let primaryDone = false
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      clearTimeout(timer)
+      resolve(slots.flat())
+    }
+    const timer = setTimeout(finish, deadline)
+
+    jobs.forEach((job, i) => {
+      Promise.resolve(job)
+        .then((v) => { if (Array.isArray(v)) { slots[i] = v; count += v.length } })
+        .catch(() => {})
+        .finally(() => {
+          if (i === 0) primaryDone = true
+          if (++settled === jobs.length) return finish()
+          if (primaryDone && count >= enough) finish()
+        })
+    })
+  })
+}
+
+/*
+ * Books that exist only because another book does: summaries, study guides,
+ * "trivia", reading-group questions, reviews of the real thing. The Apple
+ * Books store is full of them and they crowd out the actual novel, because
+ * their titles contain it word for word.
+ */
+const DERIVATIVE = new RegExp([
+  '\\bsummary\\b', '\\bsynopsis of\\b', '^summary:',
+  '\\bexploring\\b.*\\b(?:by|novel|book)\\b',
+  'study guide', 'studyguide', 'trivia[- ]on[- ]books', '\\btrivia\\b',
+  'conversation starters', 'quicklet', 'key takeaways', '\\bworkbook\\b',
+  'reading group guide', 'book club questions', '\\bsparknotes\\b', '\\bcliffs ?notes\\b',
+  '\\b(?:book|movie|film) review\\b', 'after reading\\b', 'personal reflections',
+  '\\ban analysis of\\b', '\\ba guide to\\b', '\\bunofficial\\b',
+  // Study aids sold under the novel's own name. "Notes" alone is far too
+  // broad — "Notes from Walnut Tree Farm" is a real book — so each series is
+  // named outright.
+  'monarch notes', 'york notes', 'coles notes', 'critical commentary',
+  'close[- ]up guide', "reader'?s guide", "barron'?s", 'insight text guide',
+  'a critical (?:study|analysis|edition)',
+].join('|'), 'i')
+
+/** Box sets and omnibuses: real, but not what someone searching a title means. */
+const COLLECTION = new RegExp([
+  '\\bbox(?:ed)? set\\b', '\\bomnibus\\b', '\\bcomplete (?:series|collection|novels|works)\\b',
+  '\\bcollection\\b', '\\bbooks? \\d+\\s*[-–]\\s*\\d+', '\\b\\d+\\s*[-–]\\s*\\d+\\s+(?:box|collection|set)',
+  '\\bcompanion\\b', '\\bgraphic novel\\b', '#\\d+\\s*$',
+  '\\b(?:tri|du|quad)logy\\b', '\\bslipcase\\b',
+  // Trade packs a bookshop would order, not something anyone reads.
+  '\\bbacklist\\b', '\\b\\d+[- ]copy\\b', '\\bppk\\b', '\\bmixed p(?:ac)?k\\b', '\\bdisplay pack\\b',
+].join('|'), 'i')
+
+export function bookNoise(title) {
+  const t = String(title || '')
+  if (DERIVATIVE.test(t)) return 'derivative'
+  if (COLLECTION.test(t)) return 'collection'
+  return null
 }
 
 export async function searchProviders(type, term, limit = 12) {
@@ -68,22 +150,90 @@ export async function searchProviders(type, term, limit = 12) {
       return []
   }
 
-  const settled = await Promise.allSettled(jobs)
-  const results = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []))
-  // Keep the richest copy of each title: providers are listed best-first.
-  return uniqueBy(results.filter(Boolean), fp).slice(0, limit)
+  /*
+   * The deadline only bites when the authoritative provider is slow — as soon
+   * as it answers with enough results we stop waiting anyway. So it can be
+   * generous: cutting Open Library off at 1.4s left book searches showing
+   * nothing but the Apple store's audiobook listings.
+   */
+  const results = await gather(jobs, { deadline: 2600, enough: Math.min(6, limit) })
+  let list = uniqueBy(results.filter(Boolean), fp)
+
+  if (type === 'book' || type === 'audiobook') {
+    /*
+     * Summaries and study guides are dropped outright — nobody searching a
+     * novel wants one. Box sets and companions are real things you might own,
+     * so they are kept but pushed below the books themselves.
+     */
+    const graded = list.map((hit) => ({ hit, noise: bookNoise(hit.title) }))
+    const keep = graded.filter((g) => g.noise !== 'derivative')
+    list = [
+      ...keep.filter((g) => !g.noise).map((g) => g.hit),
+      ...keep.filter((g) => g.noise === 'collection').map((g) => g.hit),
+    ]
+  }
+
+  return list.slice(0, limit)
 }
 
 export async function searchAllTypes(term, types, perType = 5) {
   const list = types && types.length ? types : ['film', 'tv', 'book', 'audiobook', 'album']
-  const settled = await Promise.allSettled(list.map((t) => searchProviders(t, term, perType)))
-  return settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []))
+  return gather(list.map((t) => searchProviders(t, term, perType)), { deadline: 3000, enough: 10 })
 }
 
 /**
  * Take a thin record (often just a title from a CSV) and fill in artwork,
  * genres, creators and ids from the best available provider.
  */
+/**
+ * Film or TV? Netflix's export says only the title, so a show whose rows carry
+ * no "Season N" marker arrives looking like a film. Ask both sides and let the
+ * better title match decide.
+ *
+ * Only a clear winner counts: an exact title match on one side and not the
+ * other. Anything less and the original guess stands, because a wrong flip is
+ * worse than a wrong-but-expected default.
+ */
+export async function resolveScreenType(title, year, { showCandidate = null } = {}) {
+  if (!title) return null
+  const want = normaliseTitle(title)
+
+  const rank = (hits, target = want) => {
+    let best = 0
+    for (const h of hits || []) {
+      const t = normaliseTitle(h.title)
+      let n = t === target ? 3 : t.startsWith(target) ? 1 : 0
+      if (!n) continue
+      // A year that matches is corroboration; one that clashes is a caution.
+      if (n === 3 && year && h.year) n += Math.abs(h.year - year) <= 1 ? 1 : -0.5
+      best = Math.max(best, n)
+    }
+    return best
+  }
+
+  const [films, shows, candidateShows] = await Promise.all([
+    searchProviders('film', title, 6).catch(() => []),
+    searchProviders('tv', title, 6).catch(() => []),
+    showCandidate ? searchProviders('tv', showCandidate, 6).catch(() => []) : Promise.resolve([]),
+  ])
+
+  const filmScore = rank(films)
+  const tvScore = rank(shows)
+  if (tvScore >= 3 && tvScore > filmScore) return { type: 'tv', title }
+  if (filmScore >= 3 && filmScore > tvScore) return { type: 'film', title }
+
+  /*
+   * Nothing matched the full title. If the part before the colon is itself a
+   * show — "aka Charlie Sheen: Part One" — then this is an episode of it, and
+   * the entry belongs under the show's name rather than the episode's.
+   */
+  if (showCandidate && filmScore < 3) {
+    const want2 = normaliseTitle(showCandidate)
+    if (rank(candidateShows, want2) >= 3) return { type: 'tv', title: showCandidate }
+  }
+  return null
+}
+
 export async function enrich(seed) {
   const { type } = seed
   const term = [seed.title, seed.creators?.[0]?.name].filter(Boolean).join(' ')

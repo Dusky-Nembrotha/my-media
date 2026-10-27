@@ -222,3 +222,40 @@ actions. `Esc` closes any dialog.
   (bad key, declined, expired code, 401 → reconnect) are all handled.
 - Spotify's API only exposes the last 50 plays, so it tops up rather than backfills.
   Pair it with a one-off data-download import for the full history.
+
+## Suggestions, and the data behind them
+
+Suggestions combine two things.
+
+**What you rate.** Genres, directors, writers, keywords and decades, each
+scored by how far above or below your own average you rate things carrying it,
+shrunk towards zero where the evidence is thin. This is inference: a guess
+about *why* you might like something.
+
+**What people like you rate.** Item-to-item collaborative filtering built from
+the [MovieLens](https://grouplens.org/datasets/movielens/) dataset — 32 million
+ratings from 200,000 people, published by GroupLens at the University of
+Minnesota for precisely this purpose. For each film you have rated, it works
+out which other films are rated the same way by the same people. This is
+evidence rather than inference, so it carries the most weight.
+
+Nothing is scraped, and nothing about your library leaves the machine: the
+dataset is downloaded once and the model is built locally.
+
+### Building it
+
+```sh
+node scripts/fetch-movielens.js      # ~230 MB download, kept as two CSVs
+node scripts/build-cf-model.js       # a couple of minutes; writes data/cf.db
+```
+
+Re-run the second one every so often as you rate more — the model is built
+around the films you have rated, so it sharpens as your library grows. The app
+works without it; suggestions simply fall back to the content matching.
+
+The dataset is a snapshot, so it knows nothing about the last year or two of
+releases. Those still come through TMDB and are judged on genre, people and
+keywords — the two engines cover each other's gaps.
+
+Books and music have no equivalent model yet; their suggestions come from the
+authors and artists you rate highly, and from subject matching.

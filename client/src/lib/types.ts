@@ -36,6 +36,8 @@ export interface Entry {
   notes: string | null
   tags: string[]
   source: string
+  /** How a book was taken in: 'book', 'audiobook', or 'both'. */
+  format?: string | null
   created_at: string
 }
 
@@ -62,6 +64,7 @@ export interface ProviderHit {
   type: MediaType
   title: string
   year: number | null
+  release_date?: string | null
   poster_url: string | null
   creators: Creator[]
   genres: string[]

@@ -2,9 +2,10 @@ import * as trakt from './trakt.js'
 import * as lastfm from './lastfm.js'
 import * as spotify from './spotify.js'
 import * as steam from './steam.js'
+import * as plex from './plex.js'
 
 /** Services with a working live connection. */
-export const LIVE = [trakt, lastfm, spotify, steam]
+export const LIVE = [plex, trakt, lastfm, spotify, steam]
 const BY_ID = new Map(LIVE.map((c) => [c.id, c]))
 
 export function getConnector(id) {
@@ -105,6 +106,19 @@ export const METADATA = [
       'Copy the "API Key (v3 auth)" and paste it into Settings here.',
     ],
     settingKey: 'tmdb_api_key',
+  },
+  {
+    id: 'omdb', label: 'OMDb (IMDb & Rotten Tomatoes)', mediaTypes: ['film', 'tv'], kind: 'metadata-key',
+    website: 'https://www.omdbapi.com',
+    blurb: 'Public scores for film and TV: IMDb, Rotten Tomatoes and Metacritic, all from one request. '
+      + 'IMDb and Rotten Tomatoes have no free API of their own, so this is the way to get them.',
+    instructions: [
+      'Go to omdbapi.com/apikey.aspx and choose the FREE tier (1,000 requests a day).',
+      'Enter your email and submit.',
+      'Open the activation link in the email they send — the key does not work until you do.',
+      'Paste the key into Settings here.',
+    ],
+    settingKey: 'omdb_api_key',
   },
   { id: 'openlibrary', label: 'Open Library', mediaTypes: ['book'], kind: 'metadata-free', website: 'https://openlibrary.org', blurb: 'Covers, authors, subjects and ratings for books. No key needed; already in use.' },
   { id: 'itunes', label: 'Apple', mediaTypes: ['album', 'audiobook', 'podcast'], kind: 'metadata-free', website: 'https://music.apple.com', blurb: 'Artwork and metadata for music, audiobooks and podcasts. No key needed; already in use.' },

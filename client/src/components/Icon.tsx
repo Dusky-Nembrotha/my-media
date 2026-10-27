@@ -23,6 +23,8 @@ const PATHS: Record<string, JSX.Element> = {
   x: <><path d="M6 6l12 12M18 6 6 18" /></>,
   chevronLeft: <><path d="M14.5 5 8 12l6.5 7" /></>,
   chevronRight: <><path d="M9.5 5 16 12l-6.5 7" /></>,
+  arrowDown: <><path d="M12 4v15m0 0 5.5-5.5M12 19l-5.5-5.5" /></>,
+  arrowUp: <><path d="M12 20V5m0 0 5.5 5.5M12 5 6.5 10.5" /></>,
   chevronDown: <><path d="M5 9.5 12 16l7-6.5" /></>,
   heart: <><path d="M12 20s-7.5-4.6-7.5-9.6A4.4 4.4 0 0 1 12 7.4a4.4 4.4 0 0 1 7.5 3c0 5-7.5 9.6-7.5 9.6Z" /></>,
   refresh: <><path d="M20 11.5A8 8 0 0 0 6 7L4 9" /><path d="M4 4.5V9h4.5" /><path d="M4 12.5A8 8 0 0 0 18 17l2-2" /><path d="M20 19.5V15h-4.5" /></>,

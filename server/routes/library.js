@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes, tmdb, ol, itunes, mb, wiki } from '../providers/index.js'
+import { searchProviders, searchAllTypes, bookNoise, tmdb, ol, itunes, mb, wiki, wikidata, omdb } from '../providers/index.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -11,6 +11,11 @@ import { currentUserId } from '../lib/user.js'
 
 export const router = Router()
 
+/*
+ * Each sort has both directions written out rather than flipped by string
+ * substitution: the NULL handling differs between them. Nulls stay at the
+ * bottom either way, because "no rating" is not the lowest rating.
+ */
 const SORTS = {
   // Ties are common after an import, where everything shares one date:
   // fall back to release date so the order means something.
@@ -22,6 +27,15 @@ const SORTS = {
   runtime: 'runtime IS NULL, runtime DESC',
 }
 
+const SORTS_ASC = {
+  recent: 'last_on IS NULL, last_on ASC, year IS NULL, year ASC, sort_title ASC',
+  added: 'created_at ASC',
+  rating: 'rating IS NULL, rating ASC, last_on DESC',
+  title: 'sort_title DESC',
+  year: 'year IS NULL, year ASC',
+  runtime: 'runtime IS NULL, runtime ASC',
+}
+
 function cardOf(row) {
   const w = hydrate(row)
   return {
@@ -29,6 +43,7 @@ function cardOf(row) {
     type: w.type,
     title: w.title,
     year: w.year,
+    release_date: w.release_date,
     poster_url: w.poster_url,
     backdrop_url: w.backdrop_url,
     creators: w.creators.filter((c) => c.role !== 'Cast').slice(0, 2),
@@ -61,6 +76,12 @@ router.get('/works', (req, res) => {
   }
   if (genre) { where.push('lower(w.genres) LIKE ?'); params.push(`%${String(genre).toLowerCase()}%`) }
   if (creator) { where.push('lower(w.creators) LIKE ?'); params.push(`%${String(creator).toLowerCase()}%`) }
+  // "Read" and "listened to" are the same library, filtered. 'both' counts as
+  // either, because it was both.
+  if (['book', 'audiobook'].includes(req.query.format)) {
+    where.push(`EXISTS (SELECT 1 FROM entries e2 WHERE e2.work_id = w.id AND e2.format IN (?, 'both'))`)
+    params.push(req.query.format)
+  }
   if (year) { where.push('w.year = ?'); params.push(Number(year)) }
   if (decade) {
     const d = Number(String(decade).replace('s', ''))
@@ -81,7 +102,7 @@ router.get('/works', (req, res) => {
   const filtered = `SELECT * FROM (${inner}) ${outer.length ? 'WHERE ' + outer.join(' AND ') : ''}`
 
   const rows = all(
-    `${filtered} ORDER BY ${SORTS[sort] || SORTS.recent} LIMIT ? OFFSET ?`,
+    `${filtered} ORDER BY ${(req.query.dir === 'asc' ? SORTS_ASC : SORTS)[sort] || SORTS.recent} LIMIT ? OFFSET ?`,
     ...params, ...outerParams, limit, offset,
   )
   const total = get(`SELECT count(*) c FROM (${filtered})`, ...params, ...outerParams).c
@@ -198,22 +219,25 @@ router.patch('/works/:id', (req, res) => {
 })
 
 /** Alternative covers for a title, so a poor one can be replaced. */
-router.get('/works/:id/artwork', async (req, res) => {
-  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
-  if (!work) return res.status(404).json({ error: 'Not found' })
-
-  const author = work.creators.find((c) => ['Author', 'Artist', 'Director'].includes(c.role))?.name
+/**
+ * Cover candidates for something — in the library or not.
+ *
+ * The picker is wanted at the moment of adding a book as much as afterwards,
+ * when the cover the provider chose is plainly wrong, so this works from a
+ * title and a name alone and does not need a saved work.
+ */
+async function coverCandidates({ type, title, creator, tmdbId, mbid }) {
   const jobs = []
-  if ((work.type === 'film' || work.type === 'tv') && work.tmdb_id) jobs.push(tmdb.images(work.type, work.tmdb_id))
-  if (work.type === 'book' || work.type === 'audiobook') jobs.push(ol.editionCovers(work.title, author))
-  if (['album', 'track', 'audiobook', 'podcast', 'book'].includes(work.type)) {
-    jobs.push(itunes.search(work.type, [work.title, author].filter(Boolean).join(' '), 6)
+  if ((type === 'film' || type === 'tv') && tmdbId) jobs.push(tmdb.images(type, tmdbId))
+  if (type === 'book' || type === 'audiobook') jobs.push(ol.editionCovers(title, creator))
+  if (['album', 'track', 'audiobook', 'podcast', 'book'].includes(type)) {
+    jobs.push(itunes.search(type, [title, creator].filter(Boolean).join(' '), 6)
       .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Apple', label: h.title }))))
   }
-  if (work.type === 'album' && work.mbid) {
-    jobs.push(Promise.resolve([{ url: mb.coverUrl(work.mbid, 1200), source: 'Cover Art Archive' }]))
+  if (type === 'album' && mbid) {
+    jobs.push(Promise.resolve([{ url: mb.coverUrl(mbid, 1200), source: 'Cover Art Archive' }]))
   }
-  jobs.push(wiki.search(work.type, work.title, 4)
+  jobs.push(wiki.search(type, title, 4)
     .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Wikipedia', label: h.title }))))
 
   const settled = await Promise.allSettled(jobs)
@@ -229,15 +253,29 @@ router.get('/works/:id/artwork', async (req, res) => {
   }
 
   // Measuring means downloading, so cap it and reuse anything already held.
-  const measured = []
-  for (const c of candidates.slice(0, 16)) {
+  return candidates.slice(0, 16).map((c) => {
     const already = cachedPathFor(c.url)
     if (already || c.width) {
-      measured.push({ ...c, cached: already, quality: c.width ? qualityOf({ ok: true, width: c.width }) : null })
-    } else {
-      measured.push(c)
+      return { ...c, cached: already, quality: c.width ? qualityOf({ ok: true, width: c.width }) : null }
     }
-  }
+    return c
+  })
+}
+
+const CREATOR_ROLES = ['Author', 'Artist', 'Director', 'Creator']
+
+/** Alternative covers for a title, so a poor one can be replaced. */
+router.get('/works/:id/artwork', async (req, res) => {
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+
+  const measured = await coverCandidates({
+    type: work.type,
+    title: work.title,
+    creator: work.creators.find((c) => CREATOR_ROLES.includes(c.role))?.name,
+    tmdbId: work.tmdb_id,
+    mbid: work.mbid,
+  })
 
   res.json({
     current: work.poster_url,
@@ -263,6 +301,23 @@ router.post('/works/:id/artwork', async (req, res) => {
     art.path, art.path, JSON.stringify(metadata), id,
   )
   res.json({ ok: true, poster_url: art.path, width: art.width, height: art.height, quality: art.quality })
+})
+
+
+/** The same, for something not in the library yet. */
+router.get('/artwork/candidates', async (req, res) => {
+  const type = TYPES.includes(req.query.type) ? req.query.type : 'film'
+  const title = String(req.query.title || '').trim()
+  if (!title) return res.status(400).json({ error: 'A title is needed' })
+
+  const measured = await coverCandidates({
+    type,
+    title,
+    creator: String(req.query.creator || '').trim() || undefined,
+    tmdbId: req.query.tmdb_id || null,
+    mbid: req.query.mbid || null,
+  })
+  res.json({ current: null, currentMeta: null, candidates: measured })
 })
 
 /** Everything whose cover is too small to look right. */
@@ -319,6 +374,334 @@ router.post('/artwork/upgrade', async (req, res) => {
   }
 })
 
+/**
+ * One person's shelf: what of theirs you already have, and what you don't.
+ *
+ * Clicking an author, director or artist filters the library to them; this
+ * endpoint answers the obvious next question — what else did they make? The
+ * `more` list is everything the providers know about, minus what is already
+ * logged, so it is purely the gaps.
+ */
+router.get('/creator', async (req, res) => {
+  const name = String(req.query.name || '').trim()
+  const type = TYPES.includes(req.query.type) ? req.query.type : null
+  if (!name) return res.status(400).json({ error: 'A name is needed' })
+
+  const userId = currentUserId(req)
+  const needle = `%${name.toLowerCase()}%`
+
+  // What you already have by them, and the role they play in your library.
+  const owned = all(
+    `SELECT w.id, w.type, w.title, w.year, w.creators
+       FROM works w
+      WHERE lower(w.creators) LIKE ?${type ? ' AND w.type = ?' : ''}`,
+    ...[needle, ...(type ? [type] : [])],
+  ).map((r) => ({ ...r, creators: json(r.creators, []) }))
+
+  const roles = new Map()
+  for (const w of owned) {
+    for (const c of w.creators) {
+      if (String(c.name).toLowerCase() !== name.toLowerCase()) continue
+      roles.set(c.role || 'Credits', (roles.get(c.role || 'Credits') || 0) + 1)
+    }
+  }
+  const role = [...roles.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null
+  const have = new Set(owned.map((w) => `${w.type}|${normaliseTitle(w.title)}`))
+
+  if (req.query.more !== '1') {
+    return res.json({ name, role, type, mine: owned.length, more: [] })
+  }
+
+  const wanted = type || owned[0]?.type || 'film'
+  let found = []
+  try {
+    found = await worksByPerson(name, wanted, role)
+  } catch {
+    found = []
+  }
+
+  // Only the gaps, and only once each.
+  const seen = new Set()
+  const more = []
+  for (const c of found) {
+    if (!c?.title) continue
+    const key = `${wanted}|${normaliseTitle(c.title)}`
+    if (have.has(key) || seen.has(key)) continue
+    seen.add(key)
+    more.push({
+      type: wanted,
+      title: c.title,
+      year: c.year || null,
+      poster_url: c.poster_url || null,
+      overview: c.overview || null,
+      creators: c.creators || [{ role: role || 'Author', name }],
+      external_rating: c.external_rating || null,
+      source: c.provider || 'wikidata',
+    })
+  }
+
+  more.sort((a, b) => (b.year || 0) - (a.year || 0))
+  res.json({ name, role, type: wanted, mine: owned.length, more: more.slice(0, 40), userId })
+})
+
+/** Provider fan-out for "everything this person made", per media type. */
+async function worksByPerson(name, type, role) {
+  if (type === 'book' || type === 'audiobook') {
+    const hits = await ol.search('', { author: name, limit: 40, type })
+    if (hits.length) return hits
+  }
+  if (type === 'film' || type === 'tv') {
+    const hits = await tmdb.personWorks(name, type, { limit: 40 })
+    if (hits.length) return hits
+  }
+  if (type === 'album' || type === 'track') {
+    const hits = await mb.searchAlbums(`artist:"${name}"`, 30)
+    if (hits.length) return hits
+  }
+
+  // Keyless catch-all, and the only option for games.
+  const entity = await wikidata.findEntity(name, type)
+  if (!entity) return []
+  return wikidata.worksBy(entity.qid, type, { role: role || 'Director', limit: 40 })
+}
+
+/**
+ * What everyone else thinks of it.
+ *
+ * Which sources apply depends on the medium: IMDb, Rotten Tomatoes and
+ * Metacritic for screen (all three from one OMDb request), Open Library for
+ * books, and whatever the metadata provider itself scored it. Each entry
+ * carries its own scale so a percentage is never silently shown as a mark out
+ * of ten.
+ */
+router.get('/works/:id/ratings', async (req, res) => {
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+
+  const out = []
+  const screen = work.type === 'film' || work.type === 'tv'
+
+  if (screen) {
+    const found = await omdb.ratings({
+      imdbId: work.imdb_id, title: work.title, year: work.year, type: work.type,
+    }).catch(() => null)
+    if (found?.ratings?.length) out.push(...found.ratings)
+
+    // Remember an IMDb id we did not have, so the next lookup is exact.
+    if (found?.imdbId && !work.imdb_id) {
+      run("UPDATE works SET imdb_id = ?, updated_at = datetime('now') WHERE id = ?", found.imdbId, work.id)
+    }
+
+    if (work.tmdb_id && work.external_rating) {
+      out.push({
+        source: 'TMDB',
+        score: work.external_rating,
+        scale: 10,
+        display: work.external_rating.toFixed(1),
+        votes: work.metadata?.vote_count ?? null,
+        url: `https://www.themoviedb.org/${work.type === 'tv' ? 'tv' : 'movie'}/${work.tmdb_id}`,
+      })
+    }
+  }
+
+  if (work.type === 'book' || work.type === 'audiobook') {
+    if (work.external_rating) {
+      out.push({
+        source: 'Open Library',
+        score: work.external_rating,
+        scale: 10,
+        display: work.external_rating.toFixed(1),
+        votes: work.metadata?.ratings_count ?? null,
+        url: work.olid ? `https://openlibrary.org${work.olid}` : null,
+      })
+    }
+    // Goodreads retired its API in 2020, so the best we can honestly offer is
+    // a link straight to the book's page there.
+    const author = work.creators.find((c) => c.role === 'Author')?.name
+    out.push({
+      source: 'Goodreads',
+      score: null,
+      scale: 5,
+      display: null,
+      url: work.metadata?.goodreads_url
+        || `https://www.goodreads.com/search?q=${encodeURIComponent([work.title, author].filter(Boolean).join(' '))}`,
+    })
+  }
+
+  if (!screen && work.type !== 'book' && work.type !== 'audiobook' && work.external_rating) {
+    out.push({
+      source: work.metadata?.provider === 'itunes' ? 'Apple' : 'Public',
+      score: work.external_rating,
+      scale: 10,
+      display: work.external_rating.toFixed(1),
+      url: work.metadata?.itunes_url || null,
+    })
+  }
+
+  res.json({
+    ratings: out,
+    needsOmdbKey: screen && !omdb.hasKey(),
+  })
+})
+
+/**
+ * Series and position for an author's books.
+ *
+ * Open Library does not carry series information, so this comes from Wikidata,
+ * whose coverage is patchy — plenty of books list a series but no number. It
+ * is a bonus on top of the results rather than something they wait for, and an
+ * empty answer is a perfectly normal outcome.
+ */
+router.get('/creator/series', async (req, res) => {
+  const name = String(req.query.name || '').trim()
+  if (!name) return res.status(400).json({ error: 'A name is needed' })
+
+  try {
+    const entity = await wikidata.findEntity(name, 'book')
+    if (!entity) return res.json({ name, works: [] })
+    const works = await wikidata.seriesByAuthor(entity.qid)
+    res.json({ name, qid: entity.qid, works: works.filter((w) => w.series) })
+  } catch {
+    res.json({ name, works: [] })
+  }
+})
+
+/**
+ * The rest of the series or franchise this belongs to.
+ *
+ * For film, TMDB keeps proper collections — the Dune films, the Potter films —
+ * which is exactly the question being asked. For books there is no equivalent:
+ * Open Library has no series data at all, so Wikidata fills in where it can
+ * and the answer is simply empty where it cannot.
+ *
+ * Titles already in the library come back flagged, so the carousel can show
+ * what you have alongside what you are missing.
+ */
+router.get('/works/:id/series', async (req, res) => {
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+
+  let name = null
+  let parts = []
+
+  if (work.type === 'film' && work.metadata?.collection?.id) {
+    const found = await tmdb.collection(work.metadata.collection.id).catch(() => null)
+    if (found) {
+      name = found.name
+      parts = found.parts.map((p) => ({
+        type: 'film', title: p.title, year: p.year, poster_url: p.poster_url,
+        overview: p.overview, tmdb_id: p.tmdb_id, external_rating: p.external_rating,
+        creators: p.creators || [],
+      }))
+    }
+  }
+
+  if (!parts.length && (work.type === 'book' || work.type === 'audiobook')) {
+    const author = work.creators.find((c) => c.role === 'Author' || !c.role)?.name
+    if (author) {
+      const entity = await wikidata.findEntity(author, 'book').catch(() => null)
+      const works = entity ? await wikidata.seriesByAuthor(entity.qid).catch(() => []) : []
+      const mine = works.find((w) => normaliseTitle(w.title) === normaliseTitle(work.title)
+        || normaliseTitle(w.title).endsWith(normaliseTitle(work.title)))
+      if (mine?.series) {
+        name = mine.series
+        parts = works
+          .filter((w) => w.series === mine.series)
+          .sort((a, b) => (a.ordinal ?? 99) - (b.ordinal ?? 99) || (a.year ?? 9999) - (b.year ?? 9999))
+          .map((w) => ({
+            type: work.type, title: w.title, year: w.year, ordinal: w.ordinal,
+            poster_url: null, creators: author ? [{ role: 'Author', name: author }] : [],
+          }))
+      }
+    }
+  }
+
+  if (!parts.length) return res.json({ name: null, parts: [] })
+
+  // Mark what is already yours, and link straight to it.
+  const owned = new Map(
+    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
+  )
+  res.json({
+    name,
+    parts: parts.map((p) => {
+      const id = owned.get(`${p.type}|${normaliseTitle(p.title)}`) ?? null
+      return { ...p, work_id: id, inLibrary: Boolean(id), isThisOne: id === work.id }
+    }),
+  })
+})
+
+/**
+ * What is being talked about right now, per library.
+ *
+ * Each medium has its own notion of "hot" and its own source: TMDB's trending
+ * list for film and TV, Open Library's trending works for books, and Apple's
+ * charts for music and podcasts. Games have no free equivalent, so they get an
+ * honest empty answer rather than a fabricated one.
+ *
+ * Anything already in your library is marked rather than hidden — seeing that
+ * you have already watched the film everyone is discussing is useful.
+ */
+router.get('/hot', async (req, res) => {
+  const type = TYPES.includes(req.query.type) ? req.query.type : 'film'
+  const limit = clamp(Number(req.query.limit) || 24, 1, 50)
+
+  let items = []
+  try {
+    if (type === 'film' || type === 'tv') {
+      items = await tmdb.trending(type, limit)
+    } else if (type === 'book' || type === 'audiobook') {
+      items = await ol.trending('weekly', { limit, type })
+    } else if (['album', 'track', 'podcast'].includes(type)) {
+      items = await itunes.charts(type, { limit, country: (setting('watch_region') || 'GB').toLowerCase() })
+    }
+  } catch {
+    items = []
+  }
+
+  if (!items.length) {
+    return res.json({ type, source: null, items: [], unsupported: type === 'game' })
+  }
+
+  const owned = new Map(
+    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
+  )
+  const onList = new Set(
+    all("SELECT ifnull(type,'') type, title FROM recs WHERE status = 'open'")
+      .map((r) => `${r.type}|${normaliseTitle(r.title)}`),
+  )
+
+  const source = (type === 'film' || type === 'tv') ? 'TMDB'
+    : (type === 'book' || type === 'audiobook') ? 'Open Library'
+      : 'Apple'
+
+  res.json({
+    type,
+    source,
+    items: items.slice(0, limit).map((item) => {
+      const key = `${type}|${normaliseTitle(item.title)}`
+      const id = owned.get(key) ?? null
+      return {
+        type,
+        title: item.title,
+        year: item.year ?? null,
+        poster_url: item.poster_url ?? null,
+        overview: item.overview ?? null,
+        creators: (item.creators || []).filter((c) => c.role !== 'Cast').slice(0, 2),
+        genres: (item.genres || []).slice(0, 3),
+        external_rating: item.external_rating ?? null,
+        tmdb_id: item.tmdb_id ?? null,
+        isbn: item.isbn ?? null,
+        olid: item.olid ?? null,
+        itunes_id: item.itunes_id ?? null,
+        work_id: id,
+        inLibrary: Boolean(id),
+        onList: onList.has(key),
+      }
+    }),
+  })
+})
+
 /** Where to watch it, for film and TV. */
 router.get('/works/:id/watch', async (req, res) => {
   const work = get('SELECT id, type, tmdb_id, title FROM works WHERE id = ?', Number(req.params.id))
@@ -339,6 +722,32 @@ router.post('/works/:id/refresh', (req, res) => {
   res.json({ ok: true })
 })
 
+/**
+ * Remove several at once.
+ *
+ * A bad import leaves dozens of titles you never watched, and clearing those
+ * one at a time is miserable — so this takes a list. Each is removed the same
+ * way a single delete would be, and the count comes back so the UI can say
+ * what happened.
+ */
+router.post('/works/delete', (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : [])
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0)
+  if (!ids.length) return res.status(400).json({ error: 'No titles given' })
+
+  let removed = 0
+  const titles = []
+  for (const id of ids) {
+    const work = get('SELECT id, title FROM works WHERE id = ?', id)
+    if (!work) continue
+    run('DELETE FROM works WHERE id = ?', id)
+    removed++
+    if (titles.length < 5) titles.push(work.title)
+  }
+  res.json({ ok: true, removed, titles })
+})
+
 router.delete('/works/:id', (req, res) => {
   run('DELETE FROM works WHERE id = ?', Number(req.params.id))
   res.json({ ok: true })
@@ -346,7 +755,7 @@ router.delete('/works/:id', (req, res) => {
 
 /** POST /api/log — the quick-log action, from a library work or a provider hit. */
 router.post('/log', (req, res) => {
-  const { work_id, work, rating, consumed_on, review, notes, tags, status, is_repeat, liked, progress, season } = req.body
+  const { work_id, work, rating, consumed_on, review, notes, tags, status, is_repeat, liked, progress, season, format } = req.body
   let id = work_id
   if (!id) {
     if (!work?.title || !work?.type) return res.status(400).json({ error: 'work.title and work.type are required' })
@@ -355,12 +764,14 @@ router.post('/log', (req, res) => {
     if (created || !saved.poster_url) queueEnrichment([saved.id])
   }
   const stmt = run(
-    `INSERT INTO entries (user_id, work_id, status, rating, liked, consumed_on, is_repeat, season, progress, review, notes, tags, source)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'manual')`,
+    `INSERT INTO entries (user_id, work_id, status, rating, liked, consumed_on, is_repeat, season, progress, review, notes, tags, format, source)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'manual')`,
     currentUserId(req), id, status || 'completed', rating ?? null, liked ? 1 : 0,
     consumed_on === undefined ? today() : consumed_on || null,
     is_repeat ? 1 : 0, season ?? null, progress || null, review || null, notes || null,
     JSON.stringify(tags || []),
+    // Only books have a format; everything else is taken in one way.
+    ['book', 'audiobook', 'both'].includes(format) ? format : null,
   )
   // Logging something answers any outstanding recommendation for it.
   const w = get('SELECT type, title FROM works WHERE id = ?', id)
@@ -379,7 +790,7 @@ router.patch('/entries/:id', (req, res) => {
   const entry = get('SELECT * FROM entries WHERE id = ?', id)
   if (!entry) return res.status(404).json({ error: 'Not found' })
   const patch = {}
-  for (const k of ['rating', 'consumed_on', 'review', 'notes', 'status', 'progress', 'season', 'episode']) {
+  for (const k of ['rating', 'consumed_on', 'review', 'notes', 'status', 'progress', 'season', 'episode', 'format']) {
     if (k in req.body) patch[k] = req.body[k] === '' ? null : req.body[k]
   }
   if ('liked' in req.body) patch.liked = req.body.liked ? 1 : 0
@@ -440,6 +851,30 @@ router.get('/activity', (req, res) => {
 })
 
 /** Search: your own library first, then the metadata providers. */
+/**
+ * Order the provider results.
+ *
+ * Books come back with a lot of hangers-on: summaries, study guides, box sets,
+ * companions, comic adaptations. Those are sorted into their place rather than
+ * merely penalised, because a weight big enough to sink them reliably is also
+ * big enough to distort everything else. Summaries and study guides go
+ * entirely; collections and companions follow the real books.
+ */
+function rankRemote(remote, known, score) {
+  const clean = []
+  const trailing = []
+
+  remote.forEach((r, i) => {
+    if (!r || known.has(`${r.type}|${normaliseTitle(r.title)}`)) return
+    const noise = (r.type === 'book' || r.type === 'audiobook') ? bookNoise(r.title) : null
+    if (noise === 'derivative') return
+    ;(noise ? trailing : clean).push({ r, i })
+  })
+
+  const byScore = (a, b) => score(b.r, b.i) - score(a.r, a.i)
+  return [...clean.sort(byScore), ...trailing.sort(byScore)].map(({ r }) => r)
+}
+
 router.get('/search', async (req, res) => {
   const q = String(req.query.q || '').trim()
   if (!q) return res.json({ local: [], remote: [] })
@@ -458,33 +893,54 @@ router.get('/search', async (req, res) => {
   let remote = []
   if (req.query.remote !== '0') {
     try {
+      const want = Math.min(60, Number(req.query.limit) || 12)
       remote = type
-        ? await searchProviders(type, q, 12)
-        : await searchAllTypes(q, ['film', 'tv', 'book', 'audiobook', 'album'], 5)
+        ? await searchProviders(type, q, want)
+        : await searchAllTypes(q, ['film', 'tv', 'book', 'audiobook', 'album'], Math.ceil(want / 4))
     } catch { remote = [] }
   }
 
-  // Across types the best match must float to the top, whatever media it is.
+  /*
+   * Across types the best match must float to the top, whatever media it is.
+   *
+   * The providers already return their results in relevance order and they are
+   * good at it, so that position is a signal in its own right — without it,
+   * searching "The Wheel of Time" put "The Great Hunt (The Wheel of Time Book
+   * 2)" above "The Eye of the World", purely because the query appeared inside
+   * its title.
+   */
   const want = normaliseTitle(q)
-  const score = (r) => {
+  const score = (r, index) => {
     const t = normaliseTitle(r.title)
-    let n = t === want ? 100 : t.startsWith(want) ? 70 : t.includes(want) ? 40 : 0
+    /*
+     * A title merely *containing* the query barely counts: "The Great Hunt
+     * (The Wheel of Time Book 2)" contains it only because the publisher put
+     * the series in brackets, and that is no reason to rank it above book one.
+     * Leave those to the provider's own ordering.
+     */
+    let n = t === want ? 100 : t.startsWith(want) ? 70 : t.includes(want) ? 10 : 0
+
+    // Where the provider itself ranked it, worth up to 36.
+    n += Math.max(0, 36 - index * 2.5)
+
+    // A subtitle tacked onto an exact match is still an exact match.
+    if (!n && t.split(':')[0].trim() === want) n += 60
+
     if (r.poster_url) n += 6
     if (r.year) n += 2
-    if (r.popularity) n += Math.min(8, Math.log10(1 + r.popularity) * 3)
+    if (r.popularity) n += Math.min(10, Math.log10(1 + r.popularity) * 4)
     if (r.external_rating) n += Math.min(4, r.external_rating / 3)
+
     return n
   }
 
   const known = new Set(local.map((l) => `${l.type}|${normaliseTitle(l.title)}`))
   res.json({
     local,
-    remote: remote
-      .filter((r) => r && !known.has(`${r.type}|${normaliseTitle(r.title)}`))
-      .sort((a, b) => score(b) - score(a))
-      .slice(0, 14)
+    remote: rankRemote(remote, known, score).slice(0, Math.min(60, Number(req.query.limit) || 14))
       .map((r) => ({
-        type: r.type, title: r.title, year: r.year, poster_url: r.poster_url,
+        type: r.type, title: r.title, year: r.year, release_date: r.release_date ?? null,
+        poster_url: r.poster_url,
         creators: (r.creators || []).filter((c) => c.role !== 'Cast').slice(0, 2),
         genres: (r.genres || []).slice(0, 3), overview: r.overview, provider: r.provider,
         external_rating: r.external_rating ?? null,

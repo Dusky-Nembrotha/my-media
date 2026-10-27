@@ -151,6 +151,95 @@ router.get('/import/runs', (req, res) => {
   })
 })
 
+/**
+ * Undo one import.
+ *
+ * An import that got something wrong — a source that cannot tell a film from a
+ * show, say — is best taken out whole and done again, rather than corrected by
+ * hand across a hundred entries.
+ *
+ * Entries are matched by source and by when they were created, which is the
+ * link the schema gives us. Works left with no entries at all are removed too,
+ * so the library does not fill up with titles you never logged. Anything you
+ * edited by hand since the import is left alone: only entries still untouched
+ * (updated_at unchanged from created_at) are in scope.
+ *
+ * GET first to see what would go; DELETE to do it.
+ */
+function undoScope(runId) {
+  const run_ = get('SELECT * FROM import_runs WHERE id = ?', runId)
+  if (!run_) return null
+
+  // A run with no finish time never completed; use a generous window.
+  const until = run_.finished_at || run_.started_at
+  const entries = all(
+    `SELECT e.id, e.work_id, e.updated_at, e.created_at, w.title, w.type
+       FROM entries e JOIN works w ON w.id = e.work_id
+      WHERE e.source = ?
+        AND e.created_at >= ?
+        AND e.created_at <= datetime(?, '+120 seconds')`,
+    run_.source, run_.started_at, until,
+  )
+
+  const edited = entries.filter((e) => e.updated_at && e.updated_at !== e.created_at)
+  const removable = entries.filter((e) => !e.updated_at || e.updated_at === e.created_at)
+
+  return { run: run_, entries, edited, removable }
+}
+
+router.get('/import/runs/:id/undo', (req, res) => {
+  const scope = undoScope(Number(req.params.id))
+  if (!scope) return res.status(404).json({ error: 'No such import' })
+
+  const works = new Set(scope.removable.map((e) => e.work_id))
+  res.json({
+    source: scope.run.source,
+    started_at: scope.run.started_at,
+    entries: scope.removable.length,
+    works: works.size,
+    keptBecauseEdited: scope.edited.length,
+    sample: scope.removable.slice(0, 8).map((e) => ({ title: e.title, type: e.type })),
+  })
+})
+
+router.delete('/import/runs/:id', (req, res) => {
+  const scope = undoScope(Number(req.params.id))
+  if (!scope) return res.status(404).json({ error: 'No such import' })
+
+  let entriesRemoved = 0
+  let worksRemoved = 0
+  const touched = new Set()
+
+  for (const entry of scope.removable) {
+    run('DELETE FROM entries WHERE id = ?', entry.id)
+    entriesRemoved++
+    touched.add(entry.work_id)
+  }
+
+  // A work with nothing logged against it and nothing on a list is orphaned.
+  for (const workId of touched) {
+    const left = get('SELECT count(*) c FROM entries WHERE work_id = ?', workId)?.c ?? 0
+    if (left > 0) continue
+    const listed = get('SELECT count(*) c FROM list_items WHERE work_id = ?', workId)?.c ?? 0
+    if (listed > 0) continue
+    run('DELETE FROM works WHERE id = ?', workId)
+    worksRemoved++
+  }
+
+  run(
+    "UPDATE import_runs SET status = 'undone', message = ?, finished_at = datetime('now') WHERE id = ?",
+    `Undone: removed ${entriesRemoved} entries and ${worksRemoved} titles`,
+    scope.run.id,
+  )
+
+  res.json({
+    ok: true,
+    entriesRemoved,
+    worksRemoved,
+    keptBecauseEdited: scope.edited.length,
+  })
+})
+
 function samplesDir() {
   return join(import.meta.dirname, '..', '..', 'samples')
 }

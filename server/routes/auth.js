@@ -45,7 +45,11 @@ router.post('/auth/login', (req, res) => {
   if (!isConfigured()) return res.status(409).json({ error: 'No password has been set yet' })
   if (!verifyPassword(req.body?.password)) {
     noteFailure(ip)
-    return res.status(401).json({ error: 'That password is not right' })
+    // Slow every wrong answer down. A person notices nothing; a script
+    // trying thousands of guesses very much does.
+    return setTimeout(() => {
+      res.status(401).json({ error: 'That password is not right' })
+    }, 600)
   }
   clearAttempts(ip)
   issueSession(res, req)

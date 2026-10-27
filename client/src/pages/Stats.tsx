@@ -18,7 +18,7 @@ export function StatsPage() {
     return <div className="page"><div className="skel" style={{ height: 120, marginBottom: 16 }} /><div className="skel" style={{ height: 260 }} /></div>
   }
   if (!data || !data.totals?.entries) {
-    return <div className="page"><Empty icon="chart" title="No numbers yet" action={<Link className="btn btn--primary" to="/import">Import your history</Link>}>Log a few things and this page fills with charts.</Empty></div>
+    return <div className="page"><Empty icon="chart" title="No numbers yet" action={<Link className="btn btn--primary" to="/import">Import your history</Link>}>Add a few things and this page fills with charts.</Empty></div>
   }
 
   const t = data.totals
@@ -47,7 +47,7 @@ export function StatsPage() {
       </div>
 
       <div className="statstrip statstrip--wide">
-        <StatTile label="Log entries" value={fmtNumber(t.entries)} icon="calendar" sub={`${fmtNumber(t.works)} distinct titles`} />
+        <StatTile label="Entries" value={fmtNumber(t.entries)} icon="calendar" sub={`${fmtNumber(t.works)} distinct titles`} />
         <StatTile label="Average rating" value={t.avg_rating ? `${t.avg_rating.toFixed(2)}★` : '—'} icon="star" hue="var(--star)" sub={`${fmtNumber(t.rated)} rated`} />
         {t.hours ? <StatTile label="Hours logged" value={fmtNumber(t.hours)} icon="clock" sub={t.days ? `${t.days} full days` : undefined} /> : null}
         {t.pages ? <StatTile label="Pages read" value={fmtNumber(t.pages)} icon="book" /> : null}
@@ -140,7 +140,7 @@ export function StatsPage() {
                 and they are exactly what the recommendation engine uses.
               </p>
             </div>
-            <Link className="btn btn--sm" to="/recommended"><Icon name="sparkle" size={14} /> See picks</Link>
+            <Link className="btn btn--sm" to="/films"><Icon name="sparkle" size={14} /> See suggestions</Link>
           </div>
           <div className="chartgrid">
             <ChartFrame title="Genres you over-rate" note="Deviation from your own average, in stars">

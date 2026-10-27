@@ -1,6 +1,12 @@
 import { get, run } from './db.js'
+import { fetchText } from './fetchv4.js'
 
-const UA = 'Shelved/0.1 (self-hosted personal media log)'
+/*
+ * Wikimedia's user-agent policy asks for a way to get in touch, and their
+ * SPARQL endpoint refuses anything that does not carry one — which is why
+ * series lookups were coming back as 429 regardless of how slowly we asked.
+ */
+const UA = 'Shelved/0.1 (https://github.com/Dusky-Nembrotha/shelved; self-hosted personal media log)'
 const queues = new Map()
 
 /** Per-host politeness: serialise requests and space them out. */
@@ -37,18 +43,17 @@ export async function fetchJson(url, { ttlSeconds = 60 * 60 * 24 * 7, headers = 
   try {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(url, {
+        const res = await fetchText(url, {
           headers: { 'User-Agent': UA, Accept: 'application/json', ...headers },
-          signal: AbortSignal.timeout(15000),
+          timeout: 15000,
         })
         if (res.status === 429 || res.status >= 500) throw new Error('HTTP ' + res.status)
         if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          const err = new Error(`HTTP ${res.status} for ${url}: ${text.slice(0, 200)}`)
+          const err = new Error(`HTTP ${res.status} for ${url}: ${res.text.slice(0, 200)}`)
           err.status = res.status
           throw err
         }
-        const body = await res.text()
+        const body = res.text
         run(
           `INSERT INTO http_cache (key, body, fetched_at, expires_at)
            VALUES (?, ?, datetime('now'), datetime('now', ?))
@@ -70,4 +75,14 @@ export async function fetchJson(url, { ttlSeconds = 60 * 60 * 24 * 7, headers = 
 
 export function clearCache() {
   run('DELETE FROM http_cache')
+}
+
+/*
+ * Expired cache rows were never removed, only ignored. Thousands of stale
+ * provider responses had grown the database to 43 MB of which 91% was free
+ * space, which slows every query that has to walk past it.
+ */
+export function pruneCache() {
+  const { changes } = run("DELETE FROM http_cache WHERE expires_at <= datetime('now')")
+  return changes
 }

@@ -99,3 +99,51 @@ export async function byArtist(type, artistId, limit = 20) {
     return []
   }
 }
+
+
+/*
+ * Apple's charts. The modern marketing-tools feed is unreliable from some
+ * networks, so this uses the long-standing RSS endpoint, which returns the
+ * same ordering in a slightly older shape.
+ */
+const CHART_KIND = {
+  album: 'topalbums',
+  track: 'topsongs',
+  podcast: 'toppodcasts',
+  audiobook: 'topaudiobooks',
+}
+
+export async function charts(type, { limit = 24, country = 'gb' } = {}) {
+  const kind = CHART_KIND[type]
+  if (!kind) return []
+  try {
+    const data = await fetchJson(
+      `https://itunes.apple.com/${country}/rss/${kind}/limit=${Math.min(100, limit)}/json`,
+      { ttlSeconds: 60 * 60 * 6 },
+    )
+    const entries = data?.feed?.entry || []
+    return entries.map((e) => {
+      const art = (e['im:image'] || []).slice(-1)[0]?.label || null
+      const title = e['im:name']?.label
+      if (!title) return null
+      const artist = e['im:artist']?.label || null
+      return {
+        provider: 'itunes',
+        type,
+        title,
+        year: parseYear(e['im:releaseDate']?.label),
+        release_date: e['im:releaseDate']?.label?.slice(0, 10) || null,
+        creators: artist ? [{ role: type === 'podcast' ? 'Creator' : 'Artist', name: artist }] : [],
+        genres: e.category?.attributes?.label ? [e.category.attributes.label] : [],
+        overview: e.summary?.label || null,
+        // The RSS artwork is a thumbnail; ask for a usable size.
+        poster_url: art ? art.replace(/\/\d+x\d+bb\.(jpg|png)$/, '/600x600bb.$1') : null,
+        backdrop_url: null,
+        itunes_id: e.id?.attributes?.['im:id'] || null,
+        metadata: { itunes_url: e.id?.label || null, chart: kind },
+      }
+    }).filter(Boolean)
+  } catch {
+    return []
+  }
+}

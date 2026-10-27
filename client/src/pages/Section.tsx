@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { PosterCard, PosterSkeleton } from '../components/Poster'
 import { Stars } from '../components/Stars'
 import { Empty, Modal } from '../components/Modal'
+import { Suggestions } from '../components/Suggestions'
+import { Hot } from '../components/Hot'
 import { useApp, useFetch } from '../lib/store'
 import { qs } from '../lib/api'
 import { SECTION_META, creatorLine, fmtDate, fmtRuntime, relDate } from '../lib/format'
@@ -30,6 +32,8 @@ const STATUSES = [
 ] as const
 
 interface Filters {
+  format: string | null
+  creator: string | null
   genre: string | null
   decade: string | null
   minRating: number | null
@@ -37,30 +41,59 @@ interface Filters {
   unrated: boolean
 }
 
-const EMPTY: Filters = { genre: null, decade: null, minRating: null, status: null, unrated: false }
+type Tab = 'done' | 'planned' | 'suggested' | 'hot'
+
+function dirLabel(sort: string, dir: 'desc' | 'asc') {
+  if (sort === 'title') return dir === 'desc' ? 'A to Z' : 'Z to A'
+  if (sort === 'rating') return dir === 'desc' ? 'Best first' : 'Worst first'
+  if (sort === 'year') return dir === 'desc' ? 'Newest first' : 'Oldest first'
+  if (sort === 'runtime') return dir === 'desc' ? 'Longest first' : 'Shortest first'
+  return dir === 'desc' ? 'Newest first' : 'Oldest first'
+}
+
+const EMPTY: Filters = { format: null, creator: null, genre: null, decade: null, minRating: null, status: null, unrated: false }
 
 export function SectionPage({ type }: { type: MediaType }) {
   const meta = SECTION_META[type]
-  const [tab, setTab] = useState<'done' | 'planned'>('done')
+  const [tab, setTab] = useState<Tab>('done')
   const [sort, setSort] = useState<string>('recent')
+  // Choosing the sort you are already on turns it round.
+  const [dir, setDir] = useState<'desc' | 'asc'>('desc')
   const [filters, setFilters] = useState<Filters>(EMPTY)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [view, setView] = useState<'grid' | 'list'>(() => (localStorage.getItem('mm-view') as 'grid' | 'list') || 'grid')
   const [limit, setLimit] = useState(60)
   const [q, setQ] = useState('')
+  const [params, setParams] = useSearchParams()
+  const [showMore, setShowMore] = useState(false)
+  // Selecting several at once, so a bad import can be cleared in one go.
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [confirmBulk, setConfirmBulk] = useState(false)
+  const selecting = selected.size > 0
+
+  // A ?creator= or ?genre= link (from a work page) is a filter request.
+  const urlCreator = params.get('creator')
+  const urlGenre = params.get('genre')
+  useEffect(() => {
+    if (!urlCreator && !urlGenre) return
+    setFilters((f) => ({ ...f, creator: urlCreator ?? f.creator, genre: urlGenre ?? f.genre }))
+    setTab('done')
+  }, [urlCreator, urlGenre])
 
   const query = qs({
-    type, sort, limit, q: q.trim() || null,
-    genre: filters.genre, decade: filters.decade,
+    type, sort, dir, limit, q: q.trim() || null,
+    creator: filters.creator, genre: filters.genre, decade: filters.decade, format: filters.format,
     minRating: filters.minRating, status: filters.status,
     unrated: filters.unrated ? 1 : null,
   })
-  const { version } = useApp()
+  const { version, toast, refresh } = useApp()
   const { data, loading } = useFetch<{ works: WorkCard[]; total: number }>(`/works${query}`, [query, version])
   const facets = useFetch<{ genres: { name: string; count: number }[]; decades: { name: string; count: number }[] }>(`/facets${qs({ type })}`)
 
   const active = useMemo(() => {
     const out: { key: keyof Filters; label: string }[] = []
+    if (filters.creator) out.push({ key: 'creator', label: filters.creator })
+    if (filters.format) out.push({ key: 'format', label: filters.format === 'audiobook' ? 'Listened to' : 'Read' })
     if (filters.genre) out.push({ key: 'genre', label: filters.genre })
     if (filters.decade) out.push({ key: 'decade', label: filters.decade })
     if (filters.minRating) out.push({ key: 'minRating', label: `${filters.minRating}★ and up` })
@@ -70,15 +103,36 @@ export function SectionPage({ type }: { type: MediaType }) {
   }, [filters])
 
   const works = data?.works ?? []
+  const toggle = (id: number) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
   const setViewPersist = (v: 'grid' | 'list') => { setView(v); localStorage.setItem('mm-view', v) }
-  const clearOne = (key: keyof Filters) => setFilters((f) => ({ ...f, [key]: key === 'unrated' ? false : null }))
-  const clearAll = () => { setFilters(EMPTY); setQ('') }
+  const dropParam = (key: string) => {
+    if (!params.has(key)) return
+    const next = new URLSearchParams(params)
+    next.delete(key)
+    setParams(next, { replace: true })
+  }
+  const clearOne = (key: keyof Filters) => {
+    setFilters((f) => ({ ...f, [key]: key === 'unrated' ? false : null }))
+    dropParam(key)
+  }
+  const clearAll = () => {
+    setFilters(EMPTY)
+    setQ('')
+    setParams(new URLSearchParams(), { replace: true })
+  }
 
-  if (tab === 'planned') {
+  if (tab !== 'done') {
     return (
       <div className="page">
         <SectionTabs type={type} tab={tab} setTab={setTab} />
-        <PlannedList type={type} />
+        {tab === 'planned' ? <PlannedList type={type} />
+          : tab === 'hot' ? <Hot type={type} />
+            : <Suggestions type={type} />}
       </div>
     )
   }
@@ -104,10 +158,24 @@ export function SectionPage({ type }: { type: MediaType }) {
         </label>
 
         <div className="selectwrap toolbar__sort">
-          <select className="select" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort by">
+          <select
+            className="select"
+            value={sort}
+            onChange={(e) => { setSort(e.target.value); setDir('desc') }}
+            aria-label="Sort by"
+          >
             {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
+
+        <button
+          className="btn btn--sm sortdir"
+          onClick={() => setDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+          aria-label={dir === 'desc' ? 'Sorted high to low — reverse it' : 'Sorted low to high — reverse it'}
+          title={`${SORTS.find(([v]) => v === sort)?.[1] ?? 'Sorted'}: ${dirLabel(sort, dir)}`}
+        >
+          <Icon name={dir === 'desc' ? 'arrowDown' : 'arrowUp'} size={14} />
+        </button>
 
         <button
           className={`btn btn--sm toolbar__filters${active.length ? ' is-on' : ''}`}
@@ -118,11 +186,64 @@ export function SectionPage({ type }: { type: MediaType }) {
           {active.length > 0 && <span className="toolbar__badge u-tnum">{active.length}</span>}
         </button>
 
+        {type === 'book' && (
+          <div className="selectwrap toolbar__sort">
+            <select
+              className="select"
+              value={filters.format ?? ''}
+              onChange={(e) => setFilters((f) => ({ ...f, format: e.target.value || null }))}
+              aria-label="Read or listened to"
+            >
+              <option value="">Read and heard</option>
+              <option value="book">Read</option>
+              <option value="audiobook">Listened to</option>
+            </select>
+          </div>
+        )}
+
+        <button
+          className={`btn btn--sm${selecting ? ' is-on' : ''}`}
+          onClick={() => setSelected((prev) => (prev.size ? new Set() : new Set(works.slice(0, 1).map((w) => w.id))))}
+          title={selecting ? 'Stop selecting' : 'Select several'}
+        >
+          <Icon name={selecting ? 'x' : 'check'} size={14} />
+          <span className="toolbar__filterlabel">{selecting ? 'Done' : 'Select'}</span>
+        </button>
+
         <div className="viewtoggle">
           <button className={view === 'grid' ? 'is-on' : ''} onClick={() => setViewPersist('grid')} aria-label="Grid view"><Icon name="grid" size={15} /></button>
           <button className={view === 'list' ? 'is-on' : ''} onClick={() => setViewPersist('list')} aria-label="List view"><Icon name="rows" size={15} /></button>
         </div>
       </div>
+
+      {selecting && (
+        <div className="selectbar">
+          <strong className="u-tnum">{selected.size} selected</strong>
+          <button className="linkish" onClick={() => setSelected(new Set(works.map((w) => w.id)))}>
+            Select all {works.length}
+          </button>
+          <button className="linkish" onClick={() => setSelected(new Set())}>Clear</button>
+          <span className="u-grow" />
+          <button className="btn btn--sm btn--danger" onClick={() => setConfirmBulk(true)}>
+            <Icon name="trash" size={14} /> Remove {selected.size}
+          </button>
+        </div>
+      )}
+
+      {filters.creator && (
+        <div className="creatorbar">
+          <div className="u-col" style={{ gap: 2, minWidth: 0 }}>
+            <span className="u-caps">{meta.label} by</span>
+            <strong className="u-trunc" style={{ fontSize: 18 }}>{filters.creator}</strong>
+            <span className="u-xs u-mut">
+              {data ? `${data.total} on your shelf` : 'Counting…'}
+            </span>
+          </div>
+          <button className="btn btn--primary btn--sm" onClick={() => setShowMore(true)}>
+            <Icon name="search" size={14} /> Find more
+          </button>
+        </div>
+      )}
 
       {active.length > 0 && (
         <div className="chiprow activefilters">
@@ -146,12 +267,21 @@ export function SectionPage({ type }: { type: MediaType }) {
             ? <button className="btn" onClick={clearAll}>Clear filters</button>
             : <Link className="btn btn--primary" to="/import"><Icon name="import" size={15} /> Import your history</Link>}
         >
-          {active.length || q ? null : `Log your first ${meta.singular.toLowerCase()} or import an export from another service.`}
+          {active.length || q ? null : `Add your first ${meta.singular.toLowerCase()}, or import an export from another service.`}
         </Empty>
       ) : view === 'grid' ? (
         <>
           <div className="grid" style={{ ['--card-w' as string]: meta.aspect === '1 / 1' ? '164px' : '150px' }}>
-            {works.map((w) => <PosterCard key={w.id} work={w} aspect={meta.aspect} />)}
+            {works.map((w) => (
+              <PosterCard
+                key={w.id}
+                work={w}
+                aspect={meta.aspect}
+                selectable={selecting}
+                selected={selected.has(w.id)}
+                onSelect={toggle}
+              />
+            ))}
           </div>
           {data && data.total > works.length && (
             <div style={{ display: 'grid', placeItems: 'center', marginTop: 26 }}>
@@ -163,7 +293,21 @@ export function SectionPage({ type }: { type: MediaType }) {
         </>
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          {works.map((w) => (
+          {works.map((w) => selecting ? (
+            <button key={w.id} type="button" className={`listrow listrow--pick${selected.has(w.id) ? ' is-picked' : ''}`} onClick={() => toggle(w.id)}>
+              <span className="listrow__tick"><Icon name={selected.has(w.id) ? 'check' : 'plus'} size={13} /></span>
+              {w.poster_url
+                ? <img className="listrow__thumb" src={artworkUrl(w.poster_url)} alt="" loading="lazy" style={{ aspectRatio: meta.aspect }} />
+                : <span className="listrow__thumb" style={{ aspectRatio: meta.aspect }} />}
+              <span className="u-col u-grow" style={{ gap: 3, minWidth: 0, textAlign: 'left' }}>
+                <span style={{ fontSize: 14, fontWeight: 560 }} className="u-trunc">{w.title}</span>
+                <span className="u-xs u-mut u-trunc">
+                  {[w.year, creatorLine(w.creators, 2), w.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <span className="listrow__right u-xs u-mut">{fmtDate(w.last_on)}</span>
+            </button>
+          ) : (
             <Link key={w.id} to={`/work/${w.id}`} className="listrow">
               {w.poster_url
                 ? <img className="listrow__thumb" src={artworkUrl(w.poster_url)} alt="" loading="lazy" style={{ aspectRatio: meta.aspect }} />
@@ -182,6 +326,50 @@ export function SectionPage({ type }: { type: MediaType }) {
         </div>
       )}
 
+      {confirmBulk && (
+        <Modal
+          title={`Remove ${selected.size} ${selected.size === 1 ? meta.singular.toLowerCase() : meta.label.toLowerCase()}?`}
+          onClose={() => setConfirmBulk(false)}
+          footer={
+            <>
+              <button className="btn btn--ghost" onClick={() => setConfirmBulk(false)}>Keep them</button>
+              <button
+                className="btn btn--danger"
+                onClick={async () => {
+                  try {
+                    const res = await api.post<{ removed: number }>('/works/delete', { ids: [...selected] })
+                    toast(`Removed ${res.removed} ${res.removed === 1 ? 'title' : 'titles'}`)
+                    setSelected(new Set())
+                    setConfirmBulk(false)
+                    void refresh()
+                  } catch (err) { toast((err as Error).message, 'error') }
+                }}
+              >
+                Remove {selected.size}
+              </button>
+            </>
+          }
+        >
+          <div className="sheet__body">
+            <p className="u-sm u-dim" style={{ margin: 0 }}>
+              This deletes {selected.size === 1 ? 'it' : 'them'} and every log entry against
+              {selected.size === 1 ? ' it' : ' them'}. Re-importing the original export would bring
+              {selected.size === 1 ? ' it' : ' them'} back.
+            </p>
+            <div className="chiprow">
+              {works.filter((w) => selected.has(w.id)).slice(0, 10).map((w) => (
+                <span key={w.id} className="chip">{w.title}</span>
+              ))}
+              {selected.size > 10 && <span className="u-xs u-mut">+{selected.size - 10} more</span>}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showMore && filters.creator && (
+        <CreatorMore name={filters.creator} type={type} onClose={() => setShowMore(false)} />
+      )}
+
       {sheetOpen && (
         <Modal
           title={`Filter ${meta.label.toLowerCase()}`}
@@ -198,10 +386,16 @@ export function SectionPage({ type }: { type: MediaType }) {
           <div className="sheet__body">
             <div className="field sheet-sort">
               <label htmlFor="f-sort">Sort by</label>
-              <div className="selectwrap">
-                <select id="f-sort" className="select" value={sort} onChange={(e) => setSort(e.target.value)}>
-                  {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
+              <div className="u-row" style={{ gap: 8 }}>
+                <div className="selectwrap u-grow">
+                  <select id="f-sort" className="select" value={sort} onChange={(e) => { setSort(e.target.value); setDir('desc') }}>
+                    {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <button className="btn sortdir" onClick={() => setDir((d) => (d === 'desc' ? 'asc' : 'desc'))}>
+                  <Icon name={dir === 'desc' ? 'arrowDown' : 'arrowUp'} size={14} />
+                  <span className="u-xs">{dirLabel(sort, dir)}</span>
+                </button>
               </div>
             </div>
 
@@ -278,11 +472,11 @@ export function SectionPage({ type }: { type: MediaType }) {
 }
 
 
-/** Switches a library between what you have finished and what you have not. */
+/** Switches a library between what you've done, what you mean to, and what it suggests. */
 function SectionTabs({ type, tab, setTab }: {
   type: MediaType
-  tab: 'done' | 'planned'
-  setTab: (t: 'done' | 'planned') => void
+  tab: Tab
+  setTab: (t: Tab) => void
 }) {
   const meta = SECTION_META[type]
   const { data } = useFetch<{ recs: Rec[] }>(`/recs?status=open&type=${type}`, [type])
@@ -296,6 +490,12 @@ function SectionTabs({ type, tab, setTab }: {
       <button className={tab === 'planned' ? 'is-on' : ''} onClick={() => setTab('planned')}>
         {meta.planned}
         {waiting > 0 && <span className="sectiontabs__count u-tnum">{waiting}</span>}
+      </button>
+      <button className={tab === 'suggested' ? 'is-on' : ''} onClick={() => setTab('suggested')}>
+        Suggestions
+      </button>
+      <button className={tab === 'hot' ? 'is-on' : ''} onClick={() => setTab('hot')}>
+        Hot
       </button>
     </div>
   )
@@ -379,5 +579,120 @@ function PlannedList({ type }: { type: MediaType }) {
         ))}
       </div>
     </>
+  )
+}
+
+interface CreatorFind {
+  name: string
+  role: string | null
+  type: MediaType
+  mine: number
+  more: {
+    type: MediaType
+    title: string
+    year: number | null
+    poster_url: string | null
+    overview: string | null
+    creators: { role?: string; name: string }[]
+    external_rating: number | null
+    source: string
+  }[]
+}
+
+/**
+ * The rest of someone's output — what the metadata sources know about that
+ * isn't on your shelf yet. Each one can go straight onto a to-do list or be
+ * logged as already done.
+ */
+function CreatorMore({ name, type, onClose }: { name: string; type: MediaType; onClose: () => void }) {
+  const meta = SECTION_META[type]
+  const { toast, refresh } = useApp()
+  const { data, loading } = useFetch<CreatorFind>(
+    `/creator${qs({ name, type, more: 1 })}`, [name, type],
+  )
+  const [added, setAdded] = useState<Record<string, true>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+
+  async function add(item: CreatorFind['more'][number], mode: 'want' | 'done') {
+    setBusy(item.title)
+    try {
+      if (mode === 'want') {
+        await api.post('/recs', {
+          type: item.type, title: item.title, year: item.year,
+          creators: item.creators, poster_url: item.poster_url,
+          note: `From ${name}'s back catalogue`,
+        })
+        toast(`${item.title} added to ${meta.planned.toLowerCase()}`)
+      } else {
+        await api.post('/recommendations/log', {
+          pick: {
+            type: item.type, title: item.title, year: item.year,
+            creators: item.creators, poster_url: item.poster_url,
+          },
+        })
+        toast(`Logged ${item.title}`)
+      }
+      setAdded((a) => ({ ...a, [item.title]: true }))
+      void refresh()
+    } catch (err) { toast((err as Error).message, 'error') }
+    finally { setBusy(null) }
+  }
+
+  const more = data?.more ?? []
+
+  return (
+    <Modal
+      title={`More by ${name}`}
+      onClose={onClose}
+      footer={<button className="btn btn--ghost" onClick={onClose}>Done</button>}
+    >
+      <div className="sheet__body">
+        {loading ? (
+          <div className="u-col" style={{ gap: 10 }}>
+            <span className="u-sm u-mut">Asking the metadata sources…</span>
+            {Array.from({ length: 4 }, (_, i) => <div key={i} className="skel" style={{ height: 68 }} />)}
+          </div>
+        ) : !more.length ? (
+          <p className="u-sm u-mut" style={{ margin: 0 }}>
+            Nothing else found — either you have it all, or the sources don’t list
+            any other {meta.label.toLowerCase()} under that name.
+          </p>
+        ) : (
+          <>
+            <p className="u-xs u-mut" style={{ margin: '0 0 4px' }}>
+              {more.length} not on your shelf · you already have {data?.mine ?? 0}
+            </p>
+            <div className="u-col" style={{ gap: 8 }}>
+              {more.map((item) => (
+                <div key={`${item.title}-${item.year}`} className="findrow">
+                  <span className="findrow__art" style={{ aspectRatio: meta.aspect }}>
+                    <PosterArt src={item.poster_url} title={item.title} type={item.type} aspect={meta.aspect} />
+                  </span>
+                  <span className="u-col u-grow" style={{ gap: 3, minWidth: 0 }}>
+                    <span style={{ fontSize: 14, fontWeight: 560 }}>{item.title}</span>
+                    <span className="u-xs u-mut">
+                      {[item.year, item.external_rating ? `${item.external_rating.toFixed(1)} externally` : null]
+                        .filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  {added[item.title] ? (
+                    <span className="u-xs u-mut">Added</span>
+                  ) : (
+                    <span className="u-row" style={{ gap: 6 }}>
+                      <button className="btn btn--sm" disabled={busy === item.title} onClick={() => add(item, 'want')}>
+                        {meta.planned}
+                      </button>
+                      <button className="btn btn--sm btn--ghost" disabled={busy === item.title} onClick={() => add(item, 'done')}>
+                        {meta.verb}
+                      </button>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }

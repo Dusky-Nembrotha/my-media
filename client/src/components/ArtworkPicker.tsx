@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal } from './Modal'
 import { Icon } from './Icon'
-import { api } from '../lib/api'
+import { api, qs } from '../lib/api'
 import { artworkUrl } from '../lib/img'
 import { useApp, useFetch } from '../lib/store'
 
@@ -15,15 +15,30 @@ interface Candidate {
   cached?: string | null
 }
 
-/** Pick a better cover from everything the providers hold for a title. */
-export function ArtworkPicker({ workId, onClose, onChosen }: {
-  workId: number
+/**
+ * Pick a better cover from everything the providers hold for a title.
+ *
+ * Works two ways: against a saved work, where choosing writes the cover
+ * straight to it; and against something not yet added, where the chosen URL is
+ * handed back for saving with the rest of the record. The second is what makes
+ * the picker reachable at the moment you add a book and can see the cover is
+ * wrong.
+ */
+export function ArtworkPicker({ workId, unsaved, onClose, onChosen }: {
+  workId?: number
+  unsaved?: { type: string; title: string; creator?: string | null; tmdb_id?: string | null; mbid?: string | null }
   onClose: () => void
   onChosen: (poster: string) => void
 }) {
   const { toast } = useApp()
+  const path = workId
+    ? `/works/${workId}/artwork`
+    : `/artwork/candidates${qs({
+      type: unsaved?.type, title: unsaved?.title, creator: unsaved?.creator || null,
+      tmdb_id: unsaved?.tmdb_id || null, mbid: unsaved?.mbid || null,
+    })}`
   const { data, loading } = useFetch<{ current: string; currentMeta: any; candidates: Candidate[] }>(
-    `/works/${workId}/artwork`, [workId],
+    path, [path],
   )
   const [busy, setBusy] = useState<string | null>(null)
   const [custom, setCustom] = useState('')
@@ -31,6 +46,12 @@ export function ArtworkPicker({ workId, onClose, onChosen }: {
   async function choose(url: string) {
     setBusy(url)
     try {
+      // Nothing to write to yet: hand the choice back and let the save carry it.
+      if (!workId) {
+        onChosen(url)
+        onClose()
+        return
+      }
       const res = await api.post<{ poster_url: string; width: number; height: number }>(
         `/works/${workId}/artwork`, { url },
       )

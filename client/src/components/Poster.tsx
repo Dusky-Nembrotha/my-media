@@ -37,7 +37,7 @@ export function PosterArt({ src, title, type, rating, liked, flag, aspect }: {
   )
 }
 
-export function PosterCard({ work, showMeta = true, aspect }: {
+export function PosterCard({ work, showMeta = true, aspect, selectable, selected, onSelect }: {
   work: {
     id: number
     type: MediaType
@@ -52,11 +52,20 @@ export function PosterCard({ work, showMeta = true, aspect }: {
   }
   showMeta?: boolean
   aspect?: string
+  /*
+   * Selection mode. Once anything is selected, tapping a card picks it rather
+   * than opening it — the same behaviour as a photo library, and it stops a
+   * stray tap navigating away mid-tidy-up.
+   */
+  selectable?: boolean
+  selected?: boolean
+  onSelect?: (id: number) => void
 }) {
   const status = statusLabel(work.status, work.type)
   const repeat = (work.entry_count ?? 0) > 1
-  return (
-    <Link to={`/work/${work.id}`} className="poster" title={work.title}>
+
+  const body = (
+    <>
       <PosterArt
         src={work.poster_url}
         title={work.title}
@@ -74,6 +83,27 @@ export function PosterCard({ work, showMeta = true, aspect }: {
           </div>
         </div>
       )}
+    </>
+  )
+
+  if (selectable) {
+    return (
+      <button
+        type="button"
+        className={`poster poster--pick${selected ? ' is-picked' : ''}`}
+        title={work.title}
+        aria-pressed={selected}
+        onClick={() => onSelect?.(work.id)}
+      >
+        <span className="poster__tick"><Icon name={selected ? 'check' : 'plus'} size={13} /></span>
+        {body}
+      </button>
+    )
+  }
+
+  return (
+    <Link to={`/work/${work.id}`} className="poster" title={work.title}>
+      {body}
     </Link>
   )
 }

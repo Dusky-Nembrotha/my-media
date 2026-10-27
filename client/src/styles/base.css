@@ -15,21 +15,24 @@ body {
 }
 
 /*
- * A ribbon of coloured smoke across the top of the page: a pink-to-cyan
- * gradient masked by fractal noise, so it reproduces at any size without
- * shipping an image. Fixed, so it does not travel with the content.
+ * The smoke photograph, fixed to the viewport and faded back so the artwork
+ * and text stay the brightest things on the page.
  */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
+  /* Overdrawn past the viewport so the blur doesn't feather the edges in. */
+  inset: -48px;
   pointer-events: none;
   z-index: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='900' viewBox='0 0 1600 900'%3E%3Cdefs%3E%3ClinearGradient id='hue' x1='0' y1='0' x2='1' y2='0.25'%3E%3Cstop offset='0%25' stop-color='%23ff1f7a'/%3E%3Cstop offset='22%25' stop-color='%23e91ead'/%3E%3Cstop offset='44%25' stop-color='%238b2fe0'/%3E%3Cstop offset='64%25' stop-color='%234f46e5'/%3E%3Cstop offset='82%25' stop-color='%231d7fe8'/%3E%3Cstop offset='100%25' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3Cfilter id='smoke' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0019 0.0062' numOctaves='3' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 1.9 0 0 0 -0.52'/%3E%3CfeGaussianBlur stdDeviation='9'/%3E%3C/filter%3E%3Cmask id='ribbon'%3E%3Crect width='1600' height='900' filter='url(%23smoke)' fill='%23fff'/%3E%3Crect width='1600' height='900' fill='url(%23band)' style='mix-blend-mode:multiply'/%3E%3C/mask%3E%3ClinearGradient id='band' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%23000'/%3E%3Cstop offset='26%25' stop-color='%23888'/%3E%3Cstop offset='50%25' stop-color='%23fff'/%3E%3Cstop offset='74%25' stop-color='%23888'/%3E%3Cstop offset='100%25' stop-color='%23000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1600' height='900' fill='url(%23hue)' mask='url(%23ribbon)'/%3E%3C/svg%3E");
+  background-image: url("../assets/smoke.jpg");
   background-size: cover;
-  background-position: 50% 12%;
+  background-position: 50% 18%;
   background-repeat: no-repeat;
-  opacity: 0.72;
+  opacity: 0.8;
+  filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 58%, transparent 92%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 58%, transparent 92%);
 }
 
 /* Darkened at the edges so artwork and text stay the brightest things here. */
@@ -40,8 +43,7 @@ body::after {
   pointer-events: none;
   z-index: 0;
   background:
-    linear-gradient(to bottom, rgba(10, 9, 12, 0.3) 0%, rgba(10, 9, 12, 0.08) 26%, rgba(10, 9, 12, 0.72) 70%, var(--canvas) 100%),
-    radial-gradient(130% 95% at 50% 26%, transparent 46%, rgba(5, 4, 7, 0.55) 100%);
+    linear-gradient(to bottom, rgba(10, 9, 12, 0.12) 0%, transparent 22%, rgba(10, 9, 12, 0.55) 72%, var(--canvas) 100%);
 }
 
 :root[data-theme="light"] body::before { opacity: 0.14; }

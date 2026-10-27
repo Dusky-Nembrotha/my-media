@@ -16,8 +16,14 @@ function publicState(connector, conn) {
     account: conn.account,
     config: redactConfig(conn.config, connector.fields || []),
     configured: (connector.fields || []).every((f) => !f.required_for_connect || conn.config?.[f.key]),
-    hasCredentials: (connector.fields || []).filter((f) => f.secret).every((f) => Boolean(conn.config?.[f.key]))
-      && (connector.fields || []).every((f) => Boolean(conn.config?.[f.key]) || f.key === 'redirect_uri'),
+    /*
+     * Enough filled in to try connecting. Every field counts unless it is
+     * marked optional — Plex needs nothing up front, because its link flow
+     * hands back the token and then finds the server itself.
+     */
+    hasCredentials: (connector.fields || []).every(
+      (f) => f.optional || f.key === 'redirect_uri' || Boolean(conn.config?.[f.key]),
+    ),
     pending: conn.pending?.mode ? { ...conn.pending, device_code: undefined } : null,
     last_sync_at: conn.last_sync_at,
     last_result: conn.last_result,

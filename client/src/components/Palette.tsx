@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
 import { artworkUrl } from '../lib/img'
 import { api, qs } from '../lib/api'
 import { useApp } from '../lib/store'
-import { SECTION_META, TYPE_ORDER, creatorLine } from '../lib/format'
-import type { ProviderHit, WorkCard } from '../lib/types'
+import { useCloseOnBack } from '../lib/useCloseOnBack'
+import { SECTION_META, TYPE_ORDER, creatorLine, typeOf } from '../lib/format'
+import type { MediaType, ProviderHit, WorkCard } from '../lib/types'
 
 type Action = { id: string; label: string; hint?: string; icon: string; run: () => void }
 
@@ -13,6 +14,14 @@ type Action = { id: string; label: string; hint?: string; icon: string; run: () 
 export function Palette() {
   const { paletteOpen, setPaletteOpen, openLog } = useApp()
   const navigate = useNavigate()
+  const location = useLocation()
+  /*
+   * Searching from inside a library means you want that library. Opening the
+   * search on the Books page and being shown a TV series, a film and two
+   * albums before a single book is not a search, it is a shrug.
+   */
+  const here = typeOf(location.pathname)
+  const [scope, setScope] = useState<MediaType | 'all'>(here ?? 'all')
   const [q, setQ] = useState('')
   const [local, setLocal] = useState<WorkCard[]>([])
   const [remote, setRemote] = useState<ProviderHit[]>([])
@@ -38,8 +47,11 @@ export function Palette() {
   }, [setPaletteOpen])
 
   useEffect(() => {
-    if (paletteOpen) { setQ(''); setLocal([]); setRemote([]); setActive(0); setTimeout(() => inputRef.current?.focus(), 30) }
-  }, [paletteOpen])
+    if (!paletteOpen) return
+    setQ(''); setLocal([]); setRemote([]); setActive(0)
+    setScope(here ?? 'all')
+    setTimeout(() => inputRef.current?.focus(), 30)
+  }, [paletteOpen, here])
 
   useEffect(() => {
     if (!paletteOpen) return
@@ -51,21 +63,27 @@ export function Palette() {
       // Your own library comes straight from the database, so show it at once
       // rather than waiting on the metadata services.
       try {
-        const quick = await api.get<{ local: WorkCard[] }>(`/search${qs({ q: term, remote: 0 })}`)
+        const scoped = scope === 'all' ? null : scope
+        const quick = await api.get<{ local: WorkCard[] }>(`/search${qs({ q: term, type: scoped, remote: 0 })}`)
         if (seq.current === mine) setLocal(quick.local)
       } catch { /* the remote pass may still succeed */ }
 
       if (seq.current !== mine) return
       setSearching(true)
       try {
-        const res = await api.get<{ local: WorkCard[]; remote: ProviderHit[] }>(`/search${qs({ q: term })}`)
-        if (seq.current === mine) { setLocal(res.local); setRemote(res.remote.slice(0, 6)) }
+        const res = await api.get<{ local: WorkCard[]; remote: ProviderHit[] }>(
+          `/search${qs({ q: term, type: scope === 'all' ? null : scope })}`,
+        )
+        if (seq.current === mine) { setLocal(res.local); setRemote(res.remote.slice(0, 8)) }
       } catch { /* leave whatever the quick pass found */ } finally {
         if (seq.current === mine) setSearching(false)
       }
     }, 180)
     return () => clearTimeout(t)
-  }, [q, paletteOpen])
+  }, [q, paletteOpen, scope])
+
+  // Back dismisses the search rather than leaving the page behind it.
+  useCloseOnBack(paletteOpen, () => setPaletteOpen(false))
 
   if (!paletteOpen) return null
 
@@ -77,14 +95,12 @@ export function Palette() {
     ...TYPE_ORDER.slice(0, 7).map((t) => ({
       id: t, label: SECTION_META[t].label, icon: SECTION_META[t].icon, run: () => go(SECTION_META[t].path),
     })),
-    { id: 'diary', label: 'Diary', icon: 'calendar', run: () => go('/diary') },
-    { id: 'recs', label: 'Recommended for you', icon: 'sparkle', run: () => go('/recommended') },
     { id: 'inbox', label: 'Everything to check out', icon: 'inbox', run: () => go('/inbox') },
     { id: 'stats', label: 'Stats', icon: 'chart', run: () => go('/stats') },
     { id: 'connections', label: 'Connections', icon: 'key', run: () => go('/connections') },
     { id: 'import', label: 'Import data', icon: 'import', run: () => go('/import') },
     { id: 'settings', label: 'Settings', icon: 'settings', run: () => go('/settings') },
-    { id: 'log', label: 'Log something new', hint: 'opens the log dialog', icon: 'plus', run: () => { close(); openLog({ kind: 'blank' }) } },
+    { id: 'log', label: 'Add something new', hint: 'search and add anything', icon: 'plus', run: () => { close(); openLog({ kind: 'blank' }) } },
   ]
 
   const term = q.trim().toLowerCase()
@@ -110,22 +126,59 @@ export function Palette() {
     <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}>
       <div className="sheet sheet--palette" role="dialog" aria-modal="true" aria-label="Search">
         <div className="sheet__head">
-          <Icon name="search" size={17} className="u-mut" />
+          <button
+            className="iconbtn"
+            aria-label="See all results"
+            title="See all results"
+            onClick={() => q.trim() && go(`/find${qs({ q: q.trim(), type: scope === 'all' ? null : scope })}`)}
+          >
+            <Icon name="search" size={17} />
+          </button>
           <input
             ref={inputRef}
             className="palette__input"
-            placeholder="Search your library, or anything to log…"
+            placeholder={scope === 'all'
+              ? 'Search your library, or anything to add…'
+              : `Search ${SECTION_META[scope].label.toLowerCase()}…`}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={q}
             onChange={(e) => { setQ(e.target.value); setActive(0) }}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, rows.length - 1)) }
               if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
-              if (e.key === 'Enter') { e.preventDefault(); activate(active) }
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                // Shift+Enter, or no row highlighted, opens the full results.
+                if (e.shiftKey || active < 0) go(`/find${qs({ q: q.trim(), type: scope === 'all' ? null : scope })}`)
+                else activate(active)
+              }
               if (e.key === 'Escape') close()
             }}
           />
           {searching && <span className="spinner" />}
           <kbd>esc</kbd>
+        </div>
+
+        {/* What is being searched, and one tap to widen it. */}
+        <div className="palette__scope chiprow">
+          {here && (
+            <button
+              className={`chip${scope === here ? ' is-on' : ''}`}
+              onClick={() => setScope(here)}
+            >
+              <Icon name={SECTION_META[here].icon} size={12} /> {SECTION_META[here].label}
+            </button>
+          )}
+          <button className={`chip${scope === 'all' ? ' is-on' : ''}`} onClick={() => setScope('all')}>
+            Everything
+          </button>
+          {!here && TYPE_ORDER.slice(0, 5).map((t) => (
+            <button key={t} className={`chip${scope === t ? ' is-on' : ''}`} onClick={() => setScope(t)}>
+              {SECTION_META[t].label}
+            </button>
+          ))}
         </div>
         <div className="palette__list">
           {local.length > 0 && <div className="palette__group u-caps">In your library</div>}
@@ -174,11 +227,28 @@ export function Palette() {
                       {[SECTION_META[row.h.type].singular, row.h.year, creatorLine(row.h.creators, 1)].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <span className="pill">Log</span>
+                  <span className="pill">Add</span>
                 </button>
               </div>
             )
           })}
+          {/*
+            * The palette shows a handful; an author has dozens. This is the way
+            * through to all of them, with everything addable on the spot.
+            */}
+          {term.length >= 2 && (
+            <button
+              className="palette__item palette__all"
+              onClick={() => go(`/find${qs({ q: term, type: scope === 'all' ? null : scope })}`)}
+            >
+              <span className="iconbtn" style={{ pointerEvents: 'none', width: 30, height: 30 }}><Icon name="search" size={16} /></span>
+              <span className="u-grow" style={{ fontSize: 13.5 }}>
+                See all results for “{term}”
+              </span>
+              <Icon name="chevronRight" size={15} className="u-mut" />
+            </button>
+          )}
+
           {term.length >= 2 && rows.length === 0 && (
             <div style={{ padding: '26px 14px', textAlign: 'center' }} className="u-sm u-mut">
               {searching ? 'Searching…' : `Nothing found for “${q}”.`}

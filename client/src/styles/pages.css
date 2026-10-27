@@ -3,10 +3,11 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 28px;
+  gap: 18px;
   flex-wrap: wrap;
-  margin-bottom: 32px;
+  margin-bottom: 26px;
 }
+.home-hero__line { margin: 0; font-size: 13px; }
 .hero-empty {
   max-width: 62ch;
   padding: 10vh 0 0;
@@ -18,6 +19,11 @@
 .hero-empty h1 { font-size: clamp(30px, 4.6vw, 46px); line-height: 1.08; }
 .hero-empty p { font-size: 15.5px; line-height: 1.6; margin: 0; }
 
+/*
+ * The four section counts. On a phone they share one row whatever happens —
+ * wrapping turned a glanceable strip into half a screen of boxes — so the
+ * tiles divide the width between them and shrink their type to suit.
+ */
 .statstrip { display: flex; gap: 10px; flex-wrap: wrap; }
 .statstrip--wide { margin-bottom: 26px; }
 .stattile {
@@ -32,7 +38,7 @@
   transition: background var(--fast), border-color var(--fast), transform var(--fast);
 }
 a.stattile:hover { background: var(--surface-2); border-color: var(--hairline-strong); transform: translateY(-2px); }
-.stattile__icon { opacity: 0.9; margin-bottom: 4px; }
+.stattile__icon { opacity: 0.9; margin-bottom: 4px; display: flex; }
 .stattile__value { font-size: 23px; font-weight: 640; letter-spacing: -0.03em; line-height: 1.1; }
 .stattile__label { font-size: 12px; color: var(--ink-3); }
 .stattile__foot { font-size: 11px; color: var(--ink-4); margin-top: 2px; }
@@ -608,6 +614,35 @@ code {
   .recgrid { grid-template-columns: minmax(0, 1fr); }
   .hbar { grid-template-columns: 88px minmax(0, 1fr) auto; }
   .workhero__rate { gap: 14px; }
+
+  /* One row, always: the counts are for glancing at, not for scrolling past. */
+  .home-hero { gap: 12px; margin-bottom: 20px; }
+  .home-hero__line { font-size: 12px; order: 2; }
+  .statstrip {
+    order: 1;
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 7px;
+  }
+  .stattile {
+    flex: 1 1 0;
+    min-width: 0;
+    align-items: center;
+    text-align: center;
+    gap: 0;
+    padding: 8px 4px;
+  }
+  .stattile__icon { margin-bottom: 1px; }
+  .stattile__value { font-size: 17px; }
+  .stattile__label {
+    font-size: 10.5px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The average rating is the first thing to go when space is tight. */
+  .stattile__foot { display: none; }
 }
 
 /* ============================================================== connections */
@@ -885,3 +920,220 @@ code {
   background: linear-gradient(to top, rgba(6, 5, 8, 0.9), transparent);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * One panel holds the whole of a title: hero, synopsis, details and what it
+ * resembles. It takes its colour from the cover, and the page backdrop
+ * continues around it.
+ */
+.workpage { position: relative; padding: 0 var(--gutter) 90px; }
+.workpanel {
+  position: relative;
+  overflow: hidden;
+  /* Clear of the floating search bar. */
+  margin-top: 10px;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--hairline);
+  background:
+    linear-gradient(to bottom,
+      rgba(var(--cover-base, 20, 20, 24), 0.26) 0%,
+      rgba(var(--cover-accent, 30, 24, 40), 0.12) 38%,
+      rgba(var(--cover-base, 20, 20, 24), 0.06) 70%,
+      transparent 100%),
+    var(--canvas-2);
+  box-shadow: var(--shadow-3);
+}
+.workpanel .workhero { padding: clamp(22px, 4vw, 44px) clamp(18px, 3vw, 40px) 24px; }
+.workpanel .workbody { padding: 0 clamp(18px, 3vw, 40px) clamp(24px, 4vw, 44px); max-width: none; }
+
+/* Shut the page and go back to the shelf. */
+.workclose {
+  position: absolute;
+  top: 14px;
+  right: var(--gutter);
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink-2);
+  background: rgba(10, 9, 12, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--hairline-strong);
+  transition: background var(--fast), color var(--fast), transform var(--fast);
+}
+.workclose:hover { background: rgba(10, 9, 12, 0.85); color: var(--ink); transform: scale(1.06); }
+:root[data-theme="light"] .workclose { background: rgba(255, 254, 252, 0.72); }
+
+/*
+ * One person's shelf. Clicking an author, director or artist filters the
+ * library to them, and this bar says whose shelf you are looking at.
+ */
+.creatorbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 15px;
+  margin-bottom: 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+}
+.creatorbar > :last-child { margin-left: auto; flex: 0 0 auto; }
+
+/* A candidate from the provider lookup: art, title, and two ways to keep it. */
+.findrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+}
+.findrow__art { flex: 0 0 46px; width: 46px; border-radius: var(--r-sm); overflow: hidden; }
+.findrow > :last-child { margin-left: auto; flex: 0 0 auto; }
+
+/* Public scores, each on its own scale and each linking out to its source. */
+.pubratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+.pubrating {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: rgba(10, 9, 12, 0.34);
+  backdrop-filter: blur(6px);
+  transition: border-color 0.14s, background 0.14s;
+}
+a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12, 0.5); }
+:root[data-theme="light"] .pubrating { background: rgba(255, 254, 252, 0.6); }
+.pubratings__score { font-size: 14.5px; font-weight: 640; letter-spacing: -0.01em; }
+.pubratings__src { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.pubratings__votes { font-size: 10.5px; color: var(--ink-4); }
+.pubrating--link { align-items: center; color: var(--ink-3); }
+
+/*
+ * Selecting several at once. The tick sits over the artwork rather than beside
+ * it so the grid keeps its shape, and a picked card is unmistakable at a
+ * glance across a screen of forty.
+ */
+.selectbar {
+  position: sticky;
+  top: var(--topbar);
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  backdrop-filter: blur(14px);
+}
+
+.poster--pick {
+  position: relative;
+  text-align: left;
+  display: block;
+  width: 100%;
+}
+.poster__tick {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(10, 9, 12, 0.6);
+  backdrop-filter: blur(6px);
+  color: var(--ink-3);
+}
+.poster--pick.is-picked .poster__tick {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.poster--pick.is-picked .poster__frame {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.listrow--pick { width: 100%; text-align: left; }
+.listrow__tick {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  color: var(--ink-3);
+}
+.listrow--pick.is-picked .listrow__tick {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.listrow--pick.is-picked { background: var(--accent-soft); }
+
+/* The sort direction, as its own control: a select fires no event when you
+   re-pick the option it is already on. */
+.sortdir { flex: 0 0 auto; gap: 6px; }
+
+/* Which library the search is looking in. */
+.palette__scope {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+/* The way out of the quick palette and into the full results. */
+.palette__all { border-top: 1px solid var(--hairline); }
+.palette__all:hover { background: var(--surface-2); }
+
+/* The title you are already looking at, within its own series row. */
+.poster.is-current .poster__frame { outline: 2px solid var(--accent); outline-offset: 1px; }
+.poster.is-current .poster__title { color: var(--accent); }
+
+/* The Hot chart: position matters here, so it is shown. */
+.hotcard { position: relative; }
+.hotrank {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 640;
+  color: var(--ink);
+  background: rgba(10, 9, 12, 0.72);
+  backdrop-filter: blur(6px);
+}
+.hotflag {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.hotadd { margin-top: 6px; width: 100%; justify-content: center; }
+.poster.is-mine .poster__frame { outline: 1px solid var(--accent-line); outline-offset: 1px; }

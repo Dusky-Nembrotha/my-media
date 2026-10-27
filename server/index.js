@@ -1,5 +1,8 @@
 import express from 'express'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { get, DB_PATH } from './lib/db.js'
+import { scheduleBackups } from './lib/backup.js'
+import { pruneCache } from './lib/http.js'
 import { join } from 'node:path'
 import { router as library } from './routes/library.js'
 import { router as recs } from './routes/recs.js'
@@ -49,10 +52,31 @@ app.use((err, req, res, next) => {
 })
 
 if (existsSync(dist)) {
-  app.use(BASE || '/', express.static(dist, { maxAge: '1h', index: false }))
+  // A build made without SHELVED_BASE_PATH emits absolute /assets/… URLs that
+  // 404 under a sub-path, leaving a blank page. Say so rather than serve it.
+  try {
+    const html = readFileSync(join(dist, 'index.html'), 'utf8')
+    const built = (html.match(/src="([^"]*)\/assets\//) || [])[1] ?? ''
+    if (built !== BASE) {
+      console.warn(
+        `[shelved] the built client expects base "${built || '/'}" but the server serves "${BASE || '/'}".`
+        + ` Rebuild with SHELVED_BASE_PATH=${BASE || ''} npm run build`,
+      )
+    }
+  } catch { /* a missing index.html is handled below */ }
+
+  // Asset filenames carry a content hash, so they can be cached hard.
+  app.use(BASE || '/', express.static(dist, { maxAge: '1y', immutable: true, index: false }))
+
+  // index.html must never be cached: it is what points at the current bundle,
+  // and a stale copy leaves the browser running yesterday's app.
+  const shell = (req, res) => {
+    res.set('Cache-Control', 'no-cache, must-revalidate')
+    res.sendFile(join(dist, 'index.html'))
+  }
   // Anything else under the base path is a client-side route.
-  app.get(`${BASE}/*`, (req, res) => res.sendFile(join(dist, 'index.html')))
-  if (BASE) app.get(BASE, (req, res) => res.sendFile(join(dist, 'index.html')))
+  app.get(`${BASE}/*`, shell)
+  if (BASE) app.get(BASE, shell)
 } else {
   app.get('/', (req, res) => res.status(503).type('html').send(
     '<pre style="font:14px ui-monospace;padding:2rem;color:#eee;background:#111">'
@@ -63,7 +87,22 @@ if (existsSync(dist)) {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  Shelved — http://localhost:${PORT}${BASE}`)
-  console.log(`  On your network: http://<this-machine>:${PORT}${BASE}\n`)
+  console.log(`  On your network: http://<this-machine>:${PORT}${BASE}`)
+  // Say which library is open and how big it is: an empty count here is the
+  // fastest way to spot a server that has latched onto the wrong file.
+  const logged = get('SELECT count(*) c FROM entries')?.c ?? 0
+  console.log(`  Library: ${DB_PATH} — ${logged} entries\n`)
+
+  // A daily snapshot, taken by the app rather than left to anyone remembering.
+  scheduleBackups()
+
+  // Expired provider responses, swept out hourly so they cannot pile up.
+  const sweep = () => {
+    const gone = pruneCache()
+    if (gone > 500) console.log(`  swept ${gone} expired cache entries`)
+  }
+  sweep()
+  setInterval(sweep, 60 * 60 * 1000).unref?.()
 
   // The queue lives in memory, so pick up anything a restart interrupted.
   const pending = queueAll({ onlyMissing: true })

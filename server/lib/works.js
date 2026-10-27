@@ -14,8 +14,9 @@ export function hydrate(work) {
   }
 }
 
-/** Books and audiobooks of the same title are different works but share metadata. */
-export function findWork({ type, title, year, ...ids }) {
+/** Audiobooks and books of the same title are the same work, found alike. */
+export function findWork({ type: rawType, title, year, ...ids }) {
+  const type = rawType === 'audiobook' ? 'book' : rawType
   for (const field of ID_FIELDS) {
     if (ids[field]) {
       const row = get(`SELECT * FROM works WHERE type = ? AND ${field} = ?`, type, String(ids[field]))
@@ -60,7 +61,13 @@ function mergeCreators(existing, incoming) {
  * ones, so a thin CSV import never erases good API metadata.
  */
 export function upsertWork(input) {
-  const type = input.type
+  /*
+   * Audiobooks are books. An audiobook is the same work as the printed
+   * edition; the difference is how you took it in, which is recorded on the
+   * entry. Without this an Audible or Goodreads import would quietly create
+   * titles of a type that has no library to appear in.
+   */
+  const type = input.type === 'audiobook' ? 'book' : input.type
   if (!type) throw new Error('work.type is required')
   const title = String(input.title || '').trim()
   if (!title) throw new Error('work.title is required')

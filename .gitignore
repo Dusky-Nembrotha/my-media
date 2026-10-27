@@ -1,8 +1,18 @@
 node_modules/
 dist/
-data/*.db
-data/*.db-*
-data/cache/
-data/uploads/
 .env
 .DS_Store
+
+# Everything under data/ is runtime state: your library, the artwork cache,
+# backups, and the MovieLens dataset (which is ~900MB and is not ours to
+# redistribute). None of it belongs in the repository.
+data/
+
+# The background image lives in client/src/assets, where the build can see it.
+*.jpg
+!client/src/assets/*.jpg
+!samples/**/*.jpg
+
+# GitHub Actions needs the "workflow" OAuth scope to push. Kept on disk;
+# run: gh auth refresh -s workflow   then: git add -f .github
+.github/

@@ -140,7 +140,30 @@ export function hasValidSession(req) {
 
 const attempts = new Map()
 
+/*
+ * A second limit that counts every failure regardless of who it came from.
+ *
+ * The per-address limit is the fair one — it stops one clumsy device locking
+ * out the house. But behind a reverse proxy the client address comes from a
+ * header the client itself can set, so anyone willing to vary it gets
+ * unlimited guesses. This backstop cannot be spoofed because it does not look
+ * at the address at all.
+ *
+ * It is set well above anything a person mistyping a password would reach, and
+ * far below what a brute-force attempt needs.
+ */
+const GLOBAL_MAX = 25
+let globalFirst = 0
+let globalCount = 0
+
+function globallyLocked() {
+  if (!globalCount) return false
+  if (Date.now() - globalFirst > ATTEMPT_WINDOW_MS) { globalCount = 0; return false }
+  return globalCount >= GLOBAL_MAX
+}
+
 export function tooManyAttempts(ip) {
+  if (globallyLocked()) return true
   const entry = attempts.get(ip)
   if (!entry) return false
   if (Date.now() - entry.first > ATTEMPT_WINDOW_MS) { attempts.delete(ip); return false }
@@ -154,10 +177,19 @@ export function noteFailure(ip) {
   } else {
     entry.count++
   }
+
+  if (!globalCount || Date.now() - globalFirst > ATTEMPT_WINDOW_MS) {
+    globalFirst = Date.now()
+    globalCount = 1
+  } else {
+    globalCount++
+  }
 }
 
 export function clearAttempts(ip) {
   attempts.delete(ip)
+  // A correct password is good evidence that this is not an attack.
+  globalCount = 0
 }
 
 /** Loopback and RFC1918 addresses only — used to gate first-run setup. */

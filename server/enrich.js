@@ -1,7 +1,7 @@
 import { all, get, run } from './lib/db.js'
-import { enrich } from './providers/index.js'
+import { enrich, resolveScreenType } from './providers/index.js'
 import { hydrate } from './lib/works.js'
-import { canonicalGenres } from './lib/util.js'
+import { canonicalGenres, sortTitle } from './lib/util.js'
 import { cacheArtwork } from './lib/artwork.js'
 
 /**
@@ -88,6 +88,46 @@ async function enrichWork(id) {
   forced.delete(id)
   if (work.metadata?.enrich_failed && !force) return
   state.lastTitle = work.title
+
+  /*
+   * Some imports cannot tell a film from a show — Netflix's export has no type
+   * column — so they mark the guess as unconfirmed. This is the one chance to
+   * put it in the right library, before anyone sees it in the wrong one.
+   */
+  let type = work.type
+  if (work.metadata?.screen_type_unknown && (type === 'film' || type === 'tv')) {
+    const resolved = await resolveScreenType(work.title, work.year, {
+      showCandidate: work.metadata.show_candidate || null,
+    }).catch(() => null)
+
+    const meta = { ...work.metadata }
+    delete meta.screen_type_unknown
+    delete meta.show_candidate
+
+    const retype = resolved && resolved.type !== type
+    const retitle = resolved && resolved.title !== work.title
+    if (retype || retitle) {
+      const sets = []
+      const args = []
+      if (retype) { sets.push('type = ?'); args.push(resolved.type); type = resolved.type }
+      if (retitle) {
+        sets.push('title = ?', 'sort_title = ?')
+        args.push(resolved.title, sortTitle(resolved.title))
+        work.title = resolved.title
+      }
+      run(
+        `UPDATE works SET ${sets.join(', ')}, metadata = ?, updated_at = datetime('now') WHERE id = ?`,
+        ...args,
+        JSON.stringify({ ...meta, ...(retype ? { retyped_from: work.type } : {}) }),
+        id,
+      )
+    } else {
+      run('UPDATE works SET metadata = ? WHERE id = ?', JSON.stringify(meta), id)
+    }
+    work.type = type
+    work.metadata = meta
+    state.lastTitle = work.title
+  }
 
   const found = await enrich(force
     ? { type: work.type, title: work.title, year: work.year }

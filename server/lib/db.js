@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -11,12 +11,30 @@ mkdirSync(dataDir, { recursive: true })
 
 export const DATA_DIR = dataDir
 /*
- * New installs get shelved.db; an existing mymedia.db is used where it is,
- * so renaming the app never puts anyone's library at risk.
+ * The library lives in exactly one file: shelved.db.
+ *
+ * It used to be mymedia.db, and for a while both names were accepted. That was
+ * a trap — anything that created shelved.db first (a stray process, a copy in
+ * the wrong place) left the real library sitting unopened next to an empty one,
+ * and the app looked freshly installed. So: one name, and a loud error rather
+ * than a quiet second database if the old name ever turns up again.
  */
 const legacy = join(dataDir, 'mymedia.db')
-const current = join(dataDir, 'shelved.db')
-const dbPath = existsSync(current) || !existsSync(legacy) ? current : legacy
+const dbPath = join(dataDir, 'shelved.db')
+
+if (existsSync(legacy)) {
+  if (existsSync(dbPath)) {
+    throw new Error(
+      `Two databases in ${dataDir}: shelved.db and the older mymedia.db.\n`
+      + 'Keep the one you want (check which has your entries), move the other out of the way, and start again.',
+    )
+  }
+  renameSync(legacy, dbPath)
+  for (const ext of ['-wal', '-shm']) {
+    if (existsSync(legacy + ext)) renameSync(legacy + ext, dbPath + ext)
+  }
+  console.log(`[shelved] renamed mymedia.db to shelved.db in ${dataDir}`)
+}
 
 export const DB_PATH = dbPath
 export const db = new DatabaseSync(dbPath)
@@ -47,6 +65,15 @@ const migrated = [
 
 if (migrated.length) {
   console.log(`  migrated: added ${migrated.map(([t]) => t).join(', ')}.user_id`)
+}
+
+/*
+ * Books and audiobooks are one library, because they are one book — the
+ * difference is how you took it in, which belongs on the entry rather than on
+ * the title. 'book', 'audiobook', or 'both' when you did some of each.
+ */
+if (addColumn('entries', 'format', 'TEXT')) {
+  console.log('  migrated: added entries.format')
 }
 
 // Indexes that depend on migrated columns, so they come after the ALTERs.

@@ -5,11 +5,11 @@ import { Row } from '../components/Row'
 import { PosterCard, PosterSkeleton } from '../components/Poster'
 import { Empty } from '../components/Modal'
 import { useApp, useFetch } from '../lib/store'
-import { SECTION_META, TYPE_ORDER, creatorLine, fmtDate, greeting, relDate, fmtNumber } from '../lib/format'
+import { SECTION_META, TYPE_ORDER, creatorLine, fmtDate, relDate, fmtNumber } from '../lib/format'
 import type { ActivityItem, Rec, WorkCard, MediaType } from '../lib/types'
 
 export function HomePage() {
-  const { counts, sections, openLog, settings } = useApp()
+  const { counts, sections, openLog } = useApp()
 
   const recent = useFetch<{ works: WorkCard[] }>('/works?sort=recent&status=logged&limit=18')
   const inProgress = useFetch<{ works: WorkCard[] }>('/works?status=in_progress&limit=12')
@@ -27,11 +27,11 @@ export function HomePage() {
           <h1>A home for everything you watch, read and listen to.</h1>
           <p className="u-dim">
             Import years of history from Letterboxd, Goodreads, Audible, Spotify, Trakt, IMDb, Netflix
-            and JustWatch — or log something by hand and let the taste engine learn from it.
+            and JustWatch — or add something by hand and let the taste engine learn from it.
           </p>
           <div className="u-row u-wrap" style={{ gap: 10, marginTop: 6 }}>
             <Link className="btn btn--primary btn--lg" to="/import"><Icon name="import" size={16} /> Import your data</Link>
-            <button className="btn btn--lg" onClick={() => openLog({ kind: 'blank' })}><Icon name="plus" size={16} /> Log something</button>
+            <button className="btn btn--lg" onClick={() => openLog({ kind: 'blank' })}><Icon name="plus" size={16} /> Add something</button>
           </div>
         </div>
       </div>
@@ -43,15 +43,12 @@ export function HomePage() {
   return (
     <div className="page">
       <header className="home-hero">
-        <div>
-          <h1>{greeting()}{settings.owner_name ? `, ${settings.owner_name}` : ''}.</h1>
-          <p className="u-dim" style={{ maxWidth: '52ch', marginTop: 6 }}>
-            {counts.entries.toLocaleString('en-GB')} entries across {live.length} section{live.length === 1 ? '' : 's'}
-            {activity.data?.activity?.[0]?.consumed_on
-              ? ` · last logged ${relDate(activity.data.activity[0].consumed_on)}`
-              : ''}
-          </p>
-        </div>
+        <p className="home-hero__line u-dim">
+          {counts.entries.toLocaleString('en-GB')} entries across {live.length} section{live.length === 1 ? '' : 's'}
+          {activity.data?.activity?.[0]?.consumed_on
+            ? ` · last ${relDate(activity.data.activity[0].consumed_on)}`
+            : ''}
+        </p>
         <div className="statstrip">
           {live.slice(0, 4).map((s) => (
             <Link key={s.type} to={SECTION_META[s.type as MediaType].path} className="stattile">
@@ -74,7 +71,6 @@ export function HomePage() {
 
       <Row
         title="Recently logged"
-        action={<Link className="btn btn--sm btn--ghost" to="/diary">Full diary <Icon name="chevronRight" size={14} /></Link>}
         cardWidth={150}
       >
         {recent.loading
@@ -160,7 +156,7 @@ export function HomePage() {
             average, then goes looking for things you have not logged yet.
           </span>
         </div>
-        <Link className="btn btn--primary" to="/recommended"><Icon name="sparkle" size={15} /> See picks</Link>
+        <Link className="btn btn--primary" to="/films"><Icon name="sparkle" size={15} /> See suggestions</Link>
       </div>
     </div>
   )

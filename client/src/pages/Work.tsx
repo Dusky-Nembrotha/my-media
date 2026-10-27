@@ -88,11 +88,18 @@ export function WorkPage() {
   }
 
   return (
-    <div className="page page--flush">
+    <div
+      className={`page page--flush workpage${tint ? ' is-tinted' : ''}`}
+      style={tint ? ({ ['--cover-base' as string]: tint.base, ['--cover-accent' as string]: tint.accent }) : undefined}
+    >
       <div
-        className={`workhero${tint ? ' is-tinted' : ''}`}
+        className="workpanel"
         style={tint ? ({ ['--cover-base' as string]: tint.base, ['--cover-accent' as string]: tint.accent }) : undefined}
       >
+      <Link to={meta.path} className="workclose" aria-label={`Back to ${meta.label}`} title={`Back to ${meta.label}`}>
+        <Icon name="x" size={18} />
+      </Link>
+      <div className={`workhero${tint ? ' is-tinted' : ''}`}>
         <div className="workhero__bg" style={{ backgroundImage: work.backdrop_url || work.poster_url ? `url(${artworkUrl(work.backdrop_url || work.poster_url)})` : undefined }} />
         <div className="workhero__scrim" />
         <div className="workhero__inner">
@@ -116,7 +123,6 @@ export function WorkPage() {
               {work.runtime ? <span>{fmtRuntime(work.runtime)}</span> : null}
               {work.pages ? <span>{work.pages} pages</span> : null}
               {work.seasons ? <span>{work.seasons} season{work.seasons === 1 ? '' : 's'}</span> : null}
-              {work.external_rating ? <span className="u-tnum">{work.external_rating.toFixed(1)} externally</span> : null}
               {work.language && <span style={{ textTransform: 'uppercase' }}>{work.language}</span>}
             </div>
             {makers.length > 0 && (
@@ -137,6 +143,8 @@ export function WorkPage() {
               </div>
             )}
 
+            <PublicRatings workId={work.id} />
+
             <div className="workhero__rate">
               <div className="u-col" style={{ gap: 5 }}>
                 <span className="u-caps">Your rating</span>
@@ -155,7 +163,7 @@ export function WorkPage() {
               </div>
               <div className="u-row u-wrap" style={{ gap: 8 }}>
                 <button className="btn btn--primary" onClick={() => openLog({ kind: 'work', work })}>
-                  <Icon name="plus" size={15} /> {work.entries.length ? `Log again` : `Log as ${meta.verb.toLowerCase()}`}
+                  <Icon name="plus" size={15} /> {work.entries.length ? `${meta.verb} again` : `${meta.verb} it`}
                 </button>
 
                 {links.map((l) => (
@@ -183,6 +191,8 @@ export function WorkPage() {
               <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink-2)' }}>{work.overview}</p>
             </section>
           )}
+
+          <SeriesRow workId={work.id} />
 
           {related.length > 0 && (
             <Row title="More like this in your library" cardWidth={140}>
@@ -228,17 +238,21 @@ export function WorkPage() {
             <div className="card">
               <div className="u-caps" style={{ marginBottom: 10 }}>On your lists</div>
               <div className="chiprow">
-                {work.lists.map((l) => <Link key={l.id} to={`/lists/${l.slug}`} className="chip">{l.name}</Link>)}
+                {/* Lists have no page of their own at the moment, so these name
+                    the list rather than pretending to link somewhere. */}
+                {work.lists.map((l) => <span key={l.id} className="chip">{l.name}</span>)}
               </div>
             </div>
           )}
         </aside>
+      </div>
       </div>
 
       {editing && (
         <EntryEditor
           entry={editing}
           type={work.type}
+          releaseDate={work.release_date || (work.year ? `${work.year}-01-01` : null)}
           onClose={() => setEditing(null)}
           onSaved={(updated) => { setData({ work: updated, related }); setEditing(null); void refresh() }}
           onDelete={() => { void removeEntry(editing.id); setEditing(null) }}
@@ -276,9 +290,10 @@ export function WorkPage() {
   )
 }
 
-function EntryEditor({ entry, type, onClose, onSaved, onDelete }: {
+function EntryEditor({ entry, type, releaseDate, onClose, onSaved, onDelete }: {
   entry: Entry
   type: Work['type']
+  releaseDate?: string | null
   onClose: () => void
   onSaved: (work: Work) => void
   onDelete: () => void
@@ -291,6 +306,7 @@ function EntryEditor({ entry, type, onClose, onSaved, onDelete }: {
   const [progress, setProgress] = useState(entry.progress || '')
   const [repeat, setRepeat] = useState(entry.is_repeat)
   const [liked, setLiked] = useState(entry.liked)
+  const [format, setFormat] = useState<string>(entry.format || 'book')
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -299,6 +315,7 @@ function EntryEditor({ entry, type, onClose, onSaved, onDelete }: {
       const updated = await api.patch<Work>(`/entries/${entry.id}`, {
         rating, consumed_on: date || null, review: review.trim() || null,
         status, progress: progress.trim() || null, is_repeat: repeat, liked,
+        format: type === 'book' ? format : null,
       })
       toast('Entry updated')
       onSaved(updated)
@@ -328,7 +345,18 @@ function EntryEditor({ entry, type, onClose, onSaved, onDelete }: {
           </div>
           <div className="field" style={{ flex: '0 0 auto' }}>
             <label htmlFor="e-date">Date</label>
-            <input id="e-date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: 160 }} />
+            <div className="u-row" style={{ gap: 6 }}>
+              <input id="e-date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: 160 }} />
+              {releaseDate && (
+                <button
+                  className={`chip${date === releaseDate ? ' is-on' : ''}`}
+                  onClick={() => setDate(releaseDate)}
+                  title={`Set the date to the release date, ${fmtDate(releaseDate)}`}
+                >
+                  <Icon name="calendar" size={13} /> On release
+                </button>
+              )}
+            </div>
           </div>
           <div className="field" style={{ flex: '0 0 auto' }}>
             <label htmlFor="e-status">Status</label>
@@ -343,6 +371,11 @@ function EntryEditor({ entry, type, onClose, onSaved, onDelete }: {
           </div>
         </div>
         <div className="chiprow">
+          {type === 'book' && ([['book', 'Read'], ['audiobook', 'Listened'], ['both', 'Both']] as const).map(([v, label]) => (
+            <button key={v} className={`chip${format === v ? ' is-on' : ''}`} onClick={() => setFormat(v)}>
+              <Icon name={v === 'audiobook' ? 'headphones' : 'book'} size={13} /> {label}
+            </button>
+          ))}
           <button className={`chip${repeat ? ' is-on' : ''}`} onClick={() => setRepeat((v) => !v)}>
             <Icon name="repeat" size={13} /> {type === 'book' || type === 'audiobook' ? 'Reread' : 'Rewatch'}
           </button>
@@ -446,5 +479,146 @@ function WhereToWatch({ workId, type }: { workId: number; type: Work['type'] }) 
         Availability from JustWatch, via TMDB.
       </p>
     </div>
+  )
+}
+
+
+/**
+ * What everybody else made of it. The scores come from whichever sources suit
+ * the medium, each shown on its own scale — a Rotten Tomatoes percentage is
+ * not a mark out of ten and is not drawn as one.
+ */
+function PublicRatings({ workId }: { workId: number }) {
+  const { data } = useFetch<{
+    ratings: { source: string; score: number | null; scale: number; display: string | null; votes?: number | null; url: string | null }[]
+    needsOmdbKey?: boolean
+  }>(`/works/${workId}/ratings`, [workId])
+
+  const scored = (data?.ratings ?? []).filter((r) => r.display)
+  const links = (data?.ratings ?? []).filter((r) => !r.display && r.url)
+  if (!scored.length && !links.length) return null
+
+  return (
+    <div className="pubratings">
+      {scored.map((r) => {
+        const body = (
+          <>
+            <span className="pubratings__score u-tnum">{r.display}</span>
+            <span className="pubratings__src">{r.source}</span>
+            {r.votes ? <span className="pubratings__votes u-tnum">{compact(r.votes)}</span> : null}
+          </>
+        )
+        return r.url
+          ? <a key={r.source} className="pubrating" href={r.url} target="_blank" rel="noreferrer">{body}</a>
+          : <span key={r.source} className="pubrating">{body}</span>
+      })}
+      {links.map((r) => (
+        <a key={r.source} className="pubrating pubrating--link" href={r.url!} target="_blank" rel="noreferrer">
+          <span className="pubratings__src">{r.source}</span>
+          <Icon name="external" size={11} />
+        </a>
+      ))}
+      {data?.needsOmdbKey && (
+        <Link to="/settings" className="pubrating pubrating--link" title="IMDb and Rotten Tomatoes need a free OMDb key">
+          <span className="pubratings__src">Add IMDb &amp; RT</span>
+          <Icon name="key" size={11} />
+        </Link>
+      )}
+    </div>
+  )
+}
+
+/** 1,284,221 → 1.3M, so a vote count never pushes the row out of shape. */
+function compact(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  return String(n)
+}
+
+
+interface SeriesPart {
+  type: Work['type']
+  title: string
+  year: number | null
+  ordinal?: number | null
+  poster_url: string | null
+  creators: { role?: string; name: string }[]
+  work_id: number | null
+  inLibrary: boolean
+  isThisOne: boolean
+}
+
+/**
+ * The rest of the series or franchise, in order.
+ *
+ * Things you already have link straight through; things you do not can be
+ * added where they stand, which is the whole point — finding the second Dune
+ * film should not mean going back to search and typing it out.
+ */
+function SeriesRow({ workId }: { workId: number }) {
+  const { toast, refresh } = useApp()
+  const { data } = useFetch<{ name: string | null; parts: SeriesPart[] }>(`/works/${workId}/series`, [workId])
+  const [added, setAdded] = useState<Record<string, true>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const parts = data?.parts ?? []
+  if (!data?.name || parts.length < 2) return null
+
+  async function add(part: SeriesPart) {
+    setBusy(part.title)
+    try {
+      await api.post('/recs', {
+        type: part.type, title: part.title, year: part.year,
+        creators: part.creators, poster_url: part.poster_url,
+      })
+      toast(`${part.title} added to ${SECTION_META[part.type].planned.toLowerCase()}`)
+      setAdded((a) => ({ ...a, [part.title]: true }))
+      void refresh()
+    } catch (err) { toast((err as Error).message, 'error') }
+    finally { setBusy(null) }
+  }
+
+  return (
+    <Row title={`More in ${data.name}`} subtitle={`${parts.length} in the series`} cardWidth={140}>
+      {parts.map((part) => {
+        const meta = SECTION_META[part.type]
+        const label = part.ordinal ? `${part.ordinal}. ${part.title}` : part.title
+        if (part.work_id) {
+          return (
+            <Link
+              key={part.title}
+              to={`/work/${part.work_id}`}
+              className={`poster${part.isThisOne ? ' is-current' : ''}`}
+              title={part.isThisOne ? `${part.title} — the one you are looking at` : part.title}
+            >
+              <PosterArt src={part.poster_url} title={part.title} type={part.type} aspect={meta.aspect} />
+              <div className="poster__meta">
+                <div className="poster__title">{label}</div>
+                <div className="poster__sub u-trunc">{part.isThisOne ? 'This one' : (part.year ?? 'In your library')}</div>
+              </div>
+            </Link>
+          )
+        }
+        return (
+          <div key={part.title} className="poster">
+            <PosterArt src={part.poster_url} title={part.title} type={part.type} aspect={meta.aspect} />
+            <div className="poster__meta">
+              <div className="poster__title">{label}</div>
+              {added[part.title] ? (
+                <div className="poster__sub u-trunc">On your list</div>
+              ) : (
+                <button
+                  className="linkish u-xs"
+                  disabled={busy === part.title}
+                  onClick={() => add(part)}
+                >
+                  + {meta.planned}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </Row>
   )
 }

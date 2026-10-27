@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from './Icon'
+import { useCloseOnBack } from '../lib/useCloseOnBack'
 
 export function Modal({ title, onClose, children, footer, wide, className }: {
   title?: ReactNode
@@ -10,6 +11,9 @@ export function Modal({ title, onClose, children, footer, wide, className }: {
   wide?: boolean
   className?: string
 }) {
+  // Back closes it, the same as Escape and the close button.
+  useCloseOnBack(true, onClose)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)

@@ -133,7 +133,7 @@ export function InboxPage() {
               <div className="reccard__actions">
                 {rec.status === 'open' && (
                   <>
-                    <button className="btn btn--sm btn--primary" onClick={() => logIt(rec)}><Icon name="check" size={13} /> Log it</button>
+                    <button className="btn btn--sm btn--primary" onClick={() => logIt(rec)}><Icon name="check" size={13} /> {SECTION_META[rec.type || 'film'].verb} it</button>
                     <button className="btn btn--sm" onClick={() => update(rec, { priority: rec.priority === 2 ? 1 : 2 })}>
                       <Icon name="star" size={13} /> {rec.priority === 2 ? 'Normal' : 'Priority'}
                     </button>

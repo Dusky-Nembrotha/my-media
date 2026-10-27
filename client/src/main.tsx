@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import './styles/tokens.css'
 import './styles/base.css'
 import './styles/app.css'
@@ -12,18 +12,37 @@ import { Palette } from './components/Palette'
 import { HomePage } from './pages/Home'
 import { SectionPage } from './pages/Section'
 import { WorkPage } from './pages/Work'
-import { DiaryPage } from './pages/Diary'
-import { RecommendedPage } from './pages/Recommended'
 import { InboxPage } from './pages/Inbox'
 import { StatsPage } from './pages/Stats'
 import { ImportPage } from './pages/Import'
 import { SettingsPage } from './pages/Settings'
 import { ConnectionsPage } from './pages/Connections'
 import { SECTION_META, TYPE_ORDER } from './lib/format'
+import { ScrollManager } from './components/ScrollManager'
+import { FindPage } from './pages/Find'
 import { LoginGate } from './pages/Login'
+import { Empty } from './components/Modal'
 import { api } from './lib/api'
 
 interface Status { configured: boolean; authenticated: boolean; canSetup: boolean; lockedOut: boolean }
+
+/*
+ * An address that matches nothing.
+ *
+ * This used to redirect to Home without a word, which made every stale link
+ * look like the app losing your place for no reason. Saying so is both more
+ * honest and far easier to report.
+ */
+function NotFound() {
+  const { pathname } = useLocation()
+  return (
+    <div className="page">
+      <Empty icon="search" title="There is nothing at that address" action={<Link className="btn btn--primary" to="/">Go to Home</Link>}>
+        <code style={{ fontSize: 12.5 }}>{pathname}</code> does not match any page.
+      </Empty>
+    </div>
+  )
+}
 
 function Root() {
   const [status, setStatus] = useState<Status | null>(null)
@@ -53,21 +72,23 @@ function Root() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AppProvider>
+        <ScrollManager />
         <Shell>
           <Routes>
             <Route path="/" element={<HomePage />} />
             {TYPE_ORDER.map((type) => (
               <Route key={type} path={SECTION_META[type].path} element={<SectionPage type={type} />} />
             ))}
+            <Route path="/find" element={<FindPage />} />
+            {/* Audiobooks folded into books; old links and bookmarks still work. */}
+            <Route path="/audiobooks" element={<Navigate to="/books" replace />} />
             <Route path="/work/:id" element={<WorkPage />} />
-            <Route path="/diary" element={<DiaryPage />} />
-            <Route path="/recommended" element={<RecommendedPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Shell>
         <LogDialog />

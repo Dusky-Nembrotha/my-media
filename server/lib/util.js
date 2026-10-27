@@ -34,6 +34,10 @@ export function normaliseTitle(title) {
     .replace(/\s*\[[^\]]*\]\s*/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
+    // A leading article is an edition's whim, not part of the title: Open
+    // Library lists both "A Thousand Splendid Suns" and "Thousand Splendid
+    // Suns", and they should not both be offered to you.
+    .replace(/^(the|a|an)\s+/, '')
 }
 
 export function parseYear(value) {

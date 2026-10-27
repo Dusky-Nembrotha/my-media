@@ -2,6 +2,7 @@ import { all, run, get } from './db.js'
 
 const DEFAULTS = {
   tmdb_api_key: '',
+  omdb_api_key: '',
   anthropic_api_key: '',
   theme: 'dark',
   accent: 'amber',
@@ -42,8 +43,10 @@ export function publicSettings() {
   return {
     ...s,
     tmdb_api_key: s.tmdb_api_key ? '••••••••' + s.tmdb_api_key.slice(-4) : '',
+    omdb_api_key: s.omdb_api_key ? '••••••••' + s.omdb_api_key.slice(-4) : '',
     anthropic_api_key: s.anthropic_api_key ? '••••••••' + s.anthropic_api_key.slice(-4) : '',
     has_tmdb: Boolean(s.tmdb_api_key),
+    has_omdb: Boolean(s.omdb_api_key),
     has_anthropic: Boolean(s.anthropic_api_key),
   }
 }

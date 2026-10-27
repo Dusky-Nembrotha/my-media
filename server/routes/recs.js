@@ -105,10 +105,17 @@ router.get('/recommendations', async (req, res) => {
   const type = String(req.query.type || 'film')
   if (!TYPES.includes(type)) return res.status(400).json({ error: 'Unknown type' })
   try {
+    /*
+     * "Show more" asks for a bigger slice, so the ceiling has to be well above
+     * the first page — it used to stop at 24, which meant one press worked and
+     * the next did nothing at all. Breadth grows with it so the candidate pool
+     * keeps up rather than the list simply running dry.
+     */
+    const limit = Math.min(90, Math.max(1, Number(req.query.limit) || 12))
     const result = await recommend(type, {
-      limit: Math.min(24, Number(req.query.limit) || 12),
+      limit,
       force: req.query.force === '1',
-      breadth: Number(req.query.breadth) || 1,
+      breadth: Number(req.query.breadth) || Math.min(2.5, 1 + (limit - 18) / 36),
     })
     res.json(result)
   } catch (err) {

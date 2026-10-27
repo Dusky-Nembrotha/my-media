@@ -19,6 +19,36 @@ function url(path, params = {}) {
 
 const poster = (p, size = 'w500') => (p ? `${IMG}/${size}${p}` : null)
 
+/*
+ * Search, discover and recommendation results carry `genre_ids`, not genre
+ * names — only a full detail fetch has the names. Without this map every
+ * candidate arrived genre-less, which left the taste profile with nothing to
+ * match on but the decade, and made every suggestion a coin toss.
+ */
+const genreMaps = new Map()
+
+async function genreMap(type) {
+  const key = type === 'tv' ? 'tv' : 'movie'
+  if (genreMaps.has(key)) return genreMaps.get(key)
+  try {
+    const data = await fetchJson(url(`/genre/${key}/list`), { ttlSeconds: 60 * 60 * 24 * 30 })
+    const map = new Map((data.genres || []).map((g) => [g.id, g.name]))
+    genreMaps.set(key, map)
+    return map
+  } catch {
+    return new Map()
+  }
+}
+
+/** Fill in genre names on results that only came with ids. */
+function withGenreNames(items, map) {
+  for (const item of items) {
+    if (item.genres?.length || !item.metadata?.genre_ids?.length) continue
+    item.genres = item.metadata.genre_ids.map((id) => map.get(id)).filter(Boolean)
+  }
+  return items
+}
+
 function normalise(item, type) {
   const isTv = type === 'tv'
   const title = isTv ? item.name : item.title
@@ -54,13 +84,18 @@ function normalise(item, type) {
     external_rating: item.vote_average || null,
     popularity: item.popularity || null,
     metadata: {
-      genre_ids: (item.genres || []).map((g) => g.id),
+      genre_ids: (item.genres || []).map((g) => g.id).concat(item.genre_ids || []),
       keywords: ((item.keywords?.keywords || item.keywords?.results || []).map((k) => k.name)).slice(0, 15),
       vote_count: item.vote_count,
       countries: (item.production_countries || []).map((c) => c.iso_3166_1),
       companies: (item.production_companies || []).map((c) => c.name).slice(0, 4),
       status: item.status,
       tagline: item.tagline,
+      // The franchise a film belongs to, which is what "more in this series"
+      // is built from.
+      collection: item.belongs_to_collection
+        ? { id: item.belongs_to_collection.id, name: item.belongs_to_collection.name }
+        : null,
     },
   }
 }
@@ -70,7 +105,8 @@ export async function search(type, term, limit = 12) {
   const path = type === 'tv' ? '/search/tv' : '/search/movie'
   try {
     const data = await fetchJson(url(path, { query: term, include_adult: 'false' }), { ttlSeconds: 60 * 60 * 24 * 7 })
-    return (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    const hits = (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    return withGenreNames(hits, await genreMap(type))
   } catch {
     return []
   }
@@ -94,7 +130,26 @@ export async function recommendations(type, id, limit = 20) {
   const path = type === 'tv' ? `/tv/${id}/recommendations` : `/movie/${id}/recommendations`
   try {
     const data = await fetchJson(url(path), { ttlSeconds: 60 * 60 * 24 * 7 })
-    return (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    const hits = (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    return withGenreNames(hits, await genreMap(type))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * TMDB's content-based neighbours, as opposed to /recommendations which is
+ * built from what people actually watched together. Keeping both widens the
+ * pool and, more usefully, a title that appears in several seeds' lists is
+ * far stronger evidence than one that appears in a single list.
+ */
+export async function similar(type, id, limit = 20) {
+  if (!hasKey() || !id) return []
+  const path = type === 'tv' ? `/tv/${id}/similar` : `/movie/${id}/similar`
+  try {
+    const data = await fetchJson(url(path), { ttlSeconds: 60 * 60 * 24 * 7 })
+    const hits = (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    return withGenreNames(hits, await genreMap(type))
   } catch {
     return []
   }
@@ -114,7 +169,8 @@ export async function discover(type, { genreIds = [], people = [], yearFrom, yea
   if (yearTo) params[type === 'tv' ? 'first_air_date.lte' : 'primary_release_date.lte'] = `${yearTo}-12-31`
   try {
     const data = await fetchJson(url(path, params), { ttlSeconds: 60 * 60 * 24 * 3 })
-    return (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    const hits = (data.results || []).slice(0, limit).map((r) => normalise(r, type)).filter(Boolean)
+    return withGenreNames(hits, await genreMap(type))
   } catch {
     return []
   }
@@ -198,5 +254,64 @@ export async function images(type, id) {
       .filter((p) => p.url)
   } catch {
     return []
+  }
+}
+
+/**
+ * Everything a person is credited on, for "more by this director".
+ * `department` filters to the job they are known for, so a search for a
+ * director doesn't return the one film they had a cameo in.
+ */
+export async function personWorks(name, type, { limit = 40 } = {}) {
+  if (!hasKey() || !name) return []
+  let personId = null
+  try {
+    const found = await fetchJson(url('/search/person', { query: name }), { ttlSeconds: 60 * 60 * 24 * 30 })
+    const hit = (found.results || [])[0]
+    if (!hit) return []
+    personId = hit.id
+  } catch {
+    return []
+  }
+
+  try {
+    const data = await fetchJson(
+      url(`/person/${personId}/combined_credits`, {}),
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    const wanted = type === 'tv' ? 'tv' : 'movie'
+    const crew = (data.crew || []).filter((c) => ['Director', 'Writer', 'Screenplay', 'Novel'].includes(c.job))
+    const cast = (data.cast || []).filter((c) => (c.order ?? 99) <= 6)
+    const pool = crew.length >= 3 ? crew : [...crew, ...cast]
+    return pool
+      .filter((c) => c.media_type === wanted)
+      .map((c) => normalise(c, type))
+      .filter(Boolean)
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+      .slice(0, limit)
+  } catch {
+    return []
+  }
+}
+
+
+/** Every film in a franchise, oldest first — the Dune films, the Potter films. */
+export async function collection(id, limit = 24) {
+  if (!hasKey() || !id) return null
+  try {
+    const data = await fetchJson(url(`/collection/${id}`), { ttlSeconds: 60 * 60 * 24 * 14 })
+    const parts = (data.parts || [])
+      .map((p) => normalise(p, 'film'))
+      .filter(Boolean)
+      .sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999))
+      .slice(0, limit)
+    return {
+      id: data.id,
+      name: data.name,
+      overview: data.overview || null,
+      parts: withGenreNames(parts, await genreMap('film')),
+    }
+  } catch {
+    return null
   }
 }

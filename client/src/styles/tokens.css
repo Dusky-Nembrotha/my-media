@@ -87,9 +87,9 @@
 
   /* layout */
   --rail: 248px;
-  --rail-collapsed: 76px;
   --gutter: clamp(16px, 3.2vw, 40px);
-  --topbar: 64px;
+  /* The floating search bar's footprint — what sticky toolbars sit below. */
+  --topbar: 62px;
 }
 
 :root[data-theme="light"] {

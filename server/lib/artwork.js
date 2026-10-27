@@ -3,6 +3,7 @@ import { mkdirSync, existsSync, writeFileSync, statSync, readdirSync, unlinkSync
 import { join, extname } from 'node:path'
 import { DATA_DIR } from './db.js'
 import { dimensionsFrom, qualityOf, MIN_POSTER_WIDTH } from './imagesize.js'
+import { fetchBuffer } from './fetchv4.js'
 
 /*
  * Artwork is copied here once and served from this machine thereafter.
@@ -66,16 +67,16 @@ export async function cacheArtwork(url, { timeout = 30000 } = {}) {
 
   try {
     // Open Library in particular is slow enough to need a long leash.
-    const res = await fetch(url, {
+    const res = await fetchBuffer(url, {
       headers: { 'User-Agent': 'Shelved/0.1 (self-hosted personal media log)' },
-      signal: AbortSignal.timeout(timeout),
+      timeout,
     })
     if (!res.ok) return null
-    const buf = Buffer.from(await res.arrayBuffer())
+    const buf = res.body
     if (buf.length < 1024) return null              // a placeholder, not a cover
 
     const size = dimensionsFrom(buf) || {}
-    const file = nameFor(url, res.headers.get('content-type') || '')
+    const file = nameFor(url, res.headers['content-type'] || '')
     writeFileSync(join(ARTWORK_DIR, file), buf)
 
     return {

@@ -91,6 +91,7 @@ function PasswordCard() {
 export function SettingsPage() {
   const { toast, refresh, settings, theme, setTheme, counts } = useApp()
   const [tmdb, setTmdb] = useState('')
+  const [omdb, setOmdb] = useState('')
   const [owner, setOwner] = useState('')
   const [saving, setSaving] = useState(false)
   const [resetText, setResetText] = useState('')
@@ -153,6 +154,32 @@ export function SettingsPage() {
           {settings.has_tmdb && (
             <button className="btn btn--ghost btn--sm" style={{ marginTop: 10 }} onClick={() => save({ tmdb_api_key: ' ' }, 'TMDB key removed')}>
               <Icon name="trash" size={13} /> Remove stored key
+            </button>
+          )}
+
+          <div className="field" style={{ marginTop: 20 }}>
+            <label htmlFor="omdb">OMDb API key — IMDb &amp; Rotten Tomatoes scores</label>
+            <div className="u-row" style={{ gap: 8 }}>
+              <input
+                id="omdb"
+                className="input"
+                placeholder={settings.omdb_api_key || 'Paste your OMDb key'}
+                value={omdb}
+                onChange={(e) => setOmdb(e.target.value)}
+              />
+              <button className="btn btn--primary" disabled={!omdb.trim() || saving} onClick={() => save({ omdb_api_key: omdb.trim() }, 'OMDb key saved — IMDb and Rotten Tomatoes scores will appear')}>
+                Save
+              </button>
+            </div>
+            <span className="field__hint">
+              {settings.has_omdb
+                ? 'A key is stored. IMDb, Rotten Tomatoes and Metacritic scores show on every film and show.'
+                : 'Free from omdbapi.com/apikey.aspx (1,000 lookups a day). Remember to click the activation link they email you.'}
+            </span>
+          </div>
+          {settings.has_omdb && (
+            <button className="btn btn--ghost btn--sm" style={{ marginTop: 10 }} onClick={() => save({ omdb_api_key: ' ' }, 'OMDb key removed')}>
+              <Icon name="trash" size={13} /> Remove stored OMDb key
             </button>
           )}
         </section>

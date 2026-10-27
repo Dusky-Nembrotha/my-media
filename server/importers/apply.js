@@ -157,11 +157,15 @@ function applyEntry(r, work, source, summary) {
 
   run(
     `INSERT INTO entries (user_id, work_id, status, rating, liked, consumed_on, is_repeat, season, episode,
-       progress, review, notes, tags, source, external_key)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       progress, review, notes, tags, format, source, external_key)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     systemUserId(), work.id, r.status || 'completed', r.rating ?? null, r.liked ? 1 : 0, r.consumed_on || null,
     r.is_repeat ? 1 : 0, r.season ?? null, r.episode ?? null, r.progress || null,
-    r.review || null, r.notes || null, JSON.stringify(r.tags || []), source, r.external_key || null,
+    r.review || null, r.notes || null, JSON.stringify(r.tags || []),
+    // An import that said "audiobook" was telling us how it was taken in, not
+    // what kind of thing it is.
+    r.type === 'audiobook' ? 'audiobook' : (work.type === 'book' ? 'book' : null),
+    source, r.external_key || null,
   )
   summary.entriesAdded++
   if (summary.samples.length < 24) {
@@ -217,6 +221,8 @@ function applyList(r, work, summary) {
 function findExistingWork(r) {
   if (!r.title) return undefined
   const norm = normaliseTitle(r.title)
-  const rows = all('SELECT id, title, year, poster_url FROM works WHERE type = ?', r.type || '')
+  // An audiobook of a book you already have is that same book.
+  const type = r.type === 'audiobook' ? 'book' : (r.type || '')
+  const rows = all('SELECT id, title, year, poster_url FROM works WHERE type = ?', type)
   return rows.find((w) => normaliseTitle(w.title) === norm && (!r.year || !w.year || Math.abs(w.year - r.year) <= 1))
 }

@@ -1,3 +1,4 @@
+import { fetchBuffer } from './fetchv4.js'
 /**
  * Reads an image's dimensions from its first few kilobytes, so artwork can be
  * judged on quality without downloading the whole file.
@@ -53,14 +54,14 @@ export function dimensionsFrom(buffer) {
 export async function measureImage(url, { timeout = 8000 } = {}) {
   if (!url) return null
   try {
-    const res = await fetch(url, {
+    const res = await fetchBuffer(url, {
       headers: { Range: 'bytes=0-65535', 'User-Agent': 'Shelved/0.1' },
-      signal: AbortSignal.timeout(timeout),
+      timeout,
     })
     if (!res.ok && res.status !== 206) return { url, ok: false, status: res.status }
-    const buf = Buffer.from(await res.arrayBuffer())
+    const buf = res.body
     const size = dimensionsFrom(buf)
-    const total = Number(res.headers.get('content-range')?.split('/')?.[1] || res.headers.get('content-length') || 0)
+    const total = Number(res.headers['content-range']?.split('/')?.[1] || res.headers['content-length'] || 0)
     return { url, ok: true, bytes: total || buf.length, ...(size || {}) }
   } catch {
     return { url, ok: false }

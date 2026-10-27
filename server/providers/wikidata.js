@@ -129,3 +129,57 @@ export async function worksBy(qid, type, { role = 'Director', limit = 40 } = {})
     .sort((a, b) => (b.popularity || 0) - (a.popularity || 0) || b.year - a.year)
     .slice(0, limit)
 }
+
+
+/**
+ * Which series each of an author's books belongs to, and where in it.
+ *
+ * Open Library has no usable series data, so this fills the gap. Wikidata's
+ * coverage is patchy — plenty of books carry a series but no number — so this
+ * is treated as a bonus rather than something to rely on, and anything that is
+ * itself a series rather than a book is filtered out.
+ */
+export async function seriesByAuthor(qid, { limit = 200 } = {}) {
+  if (!qid) return []
+  /*
+   * Excluding series and bibliography entities rather than filtering to a
+   * class: novels are typed half a dozen different ways on Wikidata, and an
+   * allow-list misses most of them.
+   */
+  const query = `
+    SELECT ?itemLabel ?year ?seriesLabel ?ordinal WHERE {
+      ?item wdt:P50 wd:${qid} .
+      FILTER NOT EXISTS { ?item wdt:P31 wd:Q277759 }
+      FILTER NOT EXISTS { ?item wdt:P31 wd:Q7725310 }
+      OPTIONAL { ?item wdt:P577 ?date }
+      OPTIONAL { ?item p:P179 ?statement . ?statement ps:P179 ?series .
+                 OPTIONAL { ?statement pq:P1545 ?ordinal } }
+      BIND(YEAR(?date) AS ?year)
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+    } LIMIT ${limit}`
+
+  let data
+  try {
+    data = await sparql(query)
+  } catch {
+    return []
+  }
+
+  // A book can belong to several series at once — Mistborn novels are also
+  // part of the Cosmere — so the numbered one wins.
+  const best = new Map()
+  for (const row of data?.results?.bindings || []) {
+    const title = row.itemLabel?.value
+    if (!title || /^Q\d+$/.test(title)) continue
+    const key = title.toLowerCase()
+    const entry = {
+      title,
+      year: row.year?.value ? Number(row.year.value) : null,
+      series: row.seriesLabel?.value || null,
+      ordinal: row.ordinal?.value ? Number(row.ordinal.value) : null,
+    }
+    const prev = best.get(key)
+    if (!prev || (entry.ordinal != null && prev.ordinal == null)) best.set(key, entry)
+  }
+  return [...best.values()]
+}

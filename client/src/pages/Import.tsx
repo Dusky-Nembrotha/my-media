@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
-import { Empty } from '../components/Modal'
+import { Empty, Modal } from '../components/Modal'
 import { api } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtNumber, relDate } from '../lib/format'
@@ -37,6 +37,7 @@ export function ImportPage() {
   const { toast, refresh } = useApp()
   const sources = useFetch<{ sources: { id: string; label: string; accepts: string[]; help: string }[]; sampleAvailable: boolean }>('/import/sources')
   const runs = useFetch<{ runs: any[]; enrich: any }>('/import/runs')
+  const [undoing, setUndoing] = useState<any | null>(null)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [chosen, setChosen] = useState<string | null>(null)
   const [options, setOptions] = useState<Record<string, any>>({})
@@ -134,7 +135,12 @@ export function ImportPage() {
               ref={fileInput}
               type="file"
               multiple
-              accept=".csv,.tsv,.json,.zip,.txt"
+              /*
+               * No accept filter. Phone file pickers match it by MIME type as
+               * well as extension and hide perfectly good CSVs when the OS
+               * labels them something unexpected — and the server identifies
+               * every upload by its contents anyway.
+               */
               style={{ display: 'none' }}
               onChange={(e) => { if (e.target.files?.length) void analyse(e.target.files) }}
             />
@@ -358,6 +364,14 @@ export function ImportPage() {
         </div>
       )}
 
+      {undoing && (
+        <UndoImport
+          run={undoing}
+          onClose={() => setUndoing(null)}
+          onDone={() => { setUndoing(null); runs.reload(); void refresh() }}
+        />
+      )}
+
       {runs.data?.runs?.length ? (
         <section style={{ marginTop: 36 }}>
           <div className="section-head">
@@ -385,6 +399,15 @@ export function ImportPage() {
                   +{r.entries_added} entries · +{r.works_added} titles{r.recs_added ? ` · +${r.recs_added} to check out` : ''}
                 </span>
                 <span className="u-xs u-mut">{relDate(String(r.started_at).slice(0, 10))}</span>
+                {r.status === 'done' && (
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    title="Remove everything this import added"
+                    onClick={() => setUndoing(r)}
+                  >
+                    <Icon name="trash" size={13} /> Undo
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -395,5 +418,78 @@ export function ImportPage() {
         <Empty icon="import" title="Loading importers…" />
       )}
     </div>
+  )
+}
+
+
+/**
+ * Taking an import back out. Shows exactly what would go first — an import you
+ * regret is usually a big one, and "remove 158 entries" is not something to
+ * confirm blind.
+ */
+function UndoImport({ run, onClose, onDone }: { run: any; onClose: () => void; onDone: () => void }) {
+  const { toast } = useApp()
+  const { data, loading } = useFetch<{
+    source: string
+    entries: number
+    works: number
+    keptBecauseEdited: number
+    sample: { title: string; type: string }[]
+  }>(`/import/runs/${run.id}/undo`, [run.id])
+  const [busy, setBusy] = useState(false)
+
+  async function go() {
+    setBusy(true)
+    try {
+      const res = await api.del<{ entriesRemoved: number; worksRemoved: number }>(`/import/runs/${run.id}`)
+      toast(`Removed ${res.entriesRemoved} entries and ${res.worksRemoved} titles`)
+      onDone()
+    } catch (err) {
+      toast((err as Error).message, 'error')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal
+      title={`Undo the ${run.source} import?`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn--ghost" onClick={onClose}>Keep it</button>
+          <button className="btn btn--danger" disabled={loading || busy || !data?.entries} onClick={go}>
+            {busy ? 'Removing…' : `Remove ${data?.entries ?? 0} entries`}
+          </button>
+        </>
+      }
+    >
+      <div className="sheet__body">
+        {loading ? (
+          <p className="u-sm u-mut" style={{ margin: 0 }}>Working out what this import added…</p>
+        ) : !data?.entries ? (
+          <p className="u-sm u-mut" style={{ margin: 0 }}>
+            Nothing left to remove — this import has already been undone, or everything it
+            added has since been edited by hand.
+          </p>
+        ) : (
+          <>
+            <p className="u-sm u-dim" style={{ margin: 0 }}>
+              This removes <strong>{data.entries}</strong> log entries and the{' '}
+              <strong>{data.works}</strong> titles that would be left with nothing logged against them.
+              {data.keptBecauseEdited > 0 && (
+                <> {data.keptBecauseEdited} {data.keptBecauseEdited === 1 ? 'entry is' : 'entries are'} kept
+                because you have edited {data.keptBecauseEdited === 1 ? 'it' : 'them'} since.</>
+              )}
+            </p>
+            <p className="u-xs u-mut" style={{ margin: 0 }}>
+              Re-importing the same export brings it all back, corrected.
+            </p>
+            <div className="chiprow">
+              {data.sample.map((x) => <span key={x.title} className="chip">{x.title}</span>)}
+              {data.entries > data.sample.length && <span className="u-xs u-mut">+{data.entries - data.sample.length} more</span>}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }
