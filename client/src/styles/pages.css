@@ -1163,8 +1163,12 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 }
 .synopsis.is-open { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 
-/* A cover you can open even when the thing is not in your library. */
-.poster__open { display: block; width: 100%; padding: 0; text-align: left; }
+/* A cover you can open even when the thing is not in your library.
+   :where() keeps this at zero specificity so it stays a reset: a card that
+   states its own thumbnail width (.reccard__art, .findrow__art) keeps it
+   rather than being stretched to the full column by whichever rule happens
+   to be written last. */
+:where(.poster__open) { display: block; width: 100%; padding: 0; text-align: left; }
 
 /* Each connection wears its service's colour, so twenty cards can be scanned. */
 .connmark {
