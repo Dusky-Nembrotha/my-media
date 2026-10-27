@@ -747,19 +747,71 @@ router.get('/hot', async (req, res) => {
    */
   const HOME = String(setting('watch_region') || 'GB').toUpperCase()
   const homeLanguages = { GB: 'en', US: 'en', IE: 'en', AU: 'en', CA: 'en', NZ: 'en' }
+  const ANGLOPHONE = new Set(['GB', 'US', 'IE', 'AU', 'CA', 'NZ'])
   const spoken = homeLanguages[HOME]
-  if (spoken && (type === 'film' || type === 'tv')) {
+
+  if (type === 'film' || type === 'tv') {
+    /*
+     * TMDB's trending order is the rate of change of its own page views,
+     * which barely tracks its own popularity figure and reflects a user base
+     * far more interested in anime than a British evening is. It had MobLand
+     * at eleven on a popularity of 302 and LINK CLICK at five on 41.
+     *
+     * So the chart is ranked on both: mostly on popularity, which is the
+     * honest measure of how much attention something is getting, with the
+     * trending rank kept as a minority voice because a thing climbing fast
+     * is news even before it is big.
+     */
+    const byPopularity = [...items].sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+    const popRank = new Map(byPopularity.map((item, i) => [item, i]))
+
     items = items
       .map((item, i) => {
+        /*
+         * Where it is actually from, not what language it is filed under.
+         * Cyberpunk: Edgerunners is a Japanese anime that TMDB records as
+         * English, so weighting on language alone promoted it to the top of
+         * the chart — precisely the thing the weighting exists to avoid.
+         * origin_country lists the country that made it first.
+         */
+        const origins = (item.metadata?.countries || []).map((c) => String(c).toUpperCase())
+        const primary = origins[0] || null
         const lang = String(item.language || '').toLowerCase()
-        const countries = (item.metadata?.countries || []).map((c) => String(c).toUpperCase())
+
         let lift = 0
-        if (lang === spoken) lift += 6
-        if (countries.includes(HOME)) lift += 4
-        return { item, rank: i - lift }
+        if (primary === HOME) lift += 7
+        else if (primary && ANGLOPHONE.has(primary)) lift += 4
+        // Language only speaks for a title that nothing else contradicts.
+        if (spoken && lang === spoken && (!primary || ANGLOPHONE.has(primary))) lift += 2
+
+        /*
+         * Popularity measures total attention, and long-runners dominate it:
+         * The Simpsons scores 3021 where the biggest new drama scores 302.
+         * Always being popular is not the same as being the thing of the
+         * moment, so age is charged for — but only against titles the
+         * trending list has not itself put near the front, because a new
+         * season does genuinely put an old show back in the conversation.
+         */
+        const age = new Date().getFullYear() - (item.year ?? new Date().getFullYear())
+        const evergreen = age > 6 && i > 12 ? Math.min(14, (age - 6) * 0.5) : 0
+
+        return { item, rank: 0.65 * (popRank.get(item) ?? i) + 0.35 * i - lift + evergreen }
       })
       .sort((a, b) => a.rank - b.rank)
       .map((x) => x.item)
+
+    /*
+     * TMDB lists some shows twice under one name — a season and its parent,
+     * or two cuts of the same thing. A chart with South Park at three and
+     * again at eight is just wrong; keep the higher placing.
+     */
+    const seen = new Set()
+    items = items.filter((item) => {
+      const key = normaliseTitle(item.title)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   }
 
   const owned = new Map(

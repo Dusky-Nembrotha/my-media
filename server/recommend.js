@@ -442,9 +442,28 @@ export function buildProfile() {
   }
 }
 
+/*
+ * What the cached suggestions were worked out from. When this changes, they
+ * are no longer an answer to the current library and are recomputed.
+ *
+ * Entries alone are not enough. Logging something enriches it a few seconds
+ * later — that is when its genres, keywords and director arrive, and those
+ * are most of what the profile reasons from. The recompute triggered by the
+ * entry therefore ran *before* the data it needed existed, and nothing fired
+ * afterwards until the twelve-hour cache expired. So the works behind your
+ * entries are watched too; candidate works the engine merely looked at are
+ * not, or every suggestion run would invalidate its own cache.
+ */
 export function profileFingerprint() {
-  const row = get(`SELECT count(*) n, ifnull(max(updated_at),'') u, ifnull(sum(rating),0) s FROM entries`)
-  return `${row.n}|${row.u}|${row.s}`
+  const row = get(`
+    SELECT
+      (SELECT count(*) FROM entries) n,
+      (SELECT ifnull(max(updated_at), '') FROM entries) u,
+      (SELECT ifnull(sum(rating), 0) FROM entries) s,
+      (SELECT ifnull(max(w.updated_at), '') FROM works w
+         WHERE EXISTS (SELECT 1 FROM entries e WHERE e.work_id = w.id)) m
+  `)
+  return `${row.n}|${row.u}|${row.s}|${row.m}`
 }
 
 /* ----------------------------------------------------- candidate generation */

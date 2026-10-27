@@ -87,7 +87,15 @@ function normalise(item, type) {
       genre_ids: (item.genres || []).map((g) => g.id).concat(item.genre_ids || []),
       keywords: ((item.keywords?.keywords || item.keywords?.results || []).map((k) => k.name)).slice(0, 15),
       vote_count: item.vote_count,
-      countries: (item.production_countries || []).map((c) => c.iso_3166_1),
+      /*
+       * origin_country first: it is the only one the list endpoints return,
+       * and it is ordered with the country that actually made the thing at
+       * the front. production_countries exists only on detail responses.
+       */
+      countries: [...new Set([
+        ...(item.origin_country || []),
+        ...(item.production_countries || []).map((c) => c.iso_3166_1),
+      ])].filter(Boolean),
       companies: (item.production_companies || []).map((c) => c.name).slice(0, 4),
       status: item.status,
       tagline: item.tagline,
