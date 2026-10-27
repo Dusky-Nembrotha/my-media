@@ -1227,3 +1227,33 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 .previewrow::-webkit-scrollbar { display: none; }
 .previewrow__item { flex: 0 0 84px; width: 84px; text-align: left; padding: 0; }
 .previewrow__title { display: block; font-size: 11.5px; margin-top: 5px; color: var(--ink-3); }
+
+/* Ticking off the seasons of a show. */
+.seasonlist { display: flex; flex-direction: column; gap: 5px; }
+.seasonpill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+  font-size: 13.5px;
+  text-align: left;
+  transition: background var(--fast), border-color var(--fast);
+}
+.seasonpill:hover { background: var(--surface-2); }
+.seasonpill__tick {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  border: 1px solid var(--hairline-strong);
+  color: transparent;
+}
+.seasonpill.is-on { border-color: var(--accent-line); background: var(--accent-soft); }
+.seasonpill.is-on .seasonpill__tick { background: var(--accent); border-color: var(--accent); color: #fff; }
+.palette__sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--hairline); }

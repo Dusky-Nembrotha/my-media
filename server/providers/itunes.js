@@ -63,9 +63,27 @@ function normalise(item, type) {
   }
 }
 
-export async function search(type, term, limit = 12) {
+export async function search(type, term, limit = 12, { field } = {}) {
   const entity = ENTITY[type]
   if (!entity || !term) return []
+
+  /*
+   * "Everything by this artist", when that is what you meant.
+   *
+   * Apple's documented `attribute` parameter is ignored by the search
+   * endpoint — asking for artistTerm, albumTerm or nothing at all returns
+   * identical results, which I checked before relying on it. What does work
+   * is finding the artist first and then listing their catalogue, which is
+   * what someone typing a band name into a music search is after anyway.
+   */
+  if (field === 'artist') {
+    const byName = await artistId(term)
+    if (byName) {
+      const albums = await byArtist(type, byName, limit)
+      if (albums.length) return albums
+    }
+  }
+
   const url = `${BASE}/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=${limit}&country=${COUNTRY}`
   try {
     const data = await fetchJson(url, { ttlSeconds: 60 * 60 * 24 * 14 })
@@ -86,6 +104,20 @@ export async function lookup(type, itunesId) {
 }
 
 /** Everything else by the same artist/author/director — our keyless candidate source. */
+/** Apple's id for a performer, so their catalogue can be listed. */
+export async function artistId(name) {
+  if (!name) return null
+  try {
+    const data = await fetchJson(
+      `${BASE}/search?term=${encodeURIComponent(name)}&entity=musicArtist&limit=1&country=${COUNTRY}`,
+      { ttlSeconds: 60 * 60 * 24 * 30 },
+    )
+    return (data.results || [])[0]?.artistId ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function byArtist(type, artistId, limit = 20) {
   const entity = ENTITY[type]
   if (!entity || !artistId) return []

@@ -22,6 +22,12 @@ export function Palette() {
    */
   const here = typeOf(location.pathname)
   const [scope, setScope] = useState<MediaType | 'all'>(here ?? 'all')
+  /*
+   * Music searches are ambiguous in a way the others are not: "Radiohead"
+   * could be the band or an album named after them, and a song title is
+   * often also an album title. Saying which narrows it.
+   */
+  const [field, setField] = useState<'any' | 'artist' | 'title'>('any')
   const [q, setQ] = useState('')
   const [local, setLocal] = useState<WorkCard[]>([])
   const [remote, setRemote] = useState<ProviderHit[]>([])
@@ -72,7 +78,11 @@ export function Palette() {
       setSearching(true)
       try {
         const res = await api.get<{ local: WorkCard[]; remote: ProviderHit[] }>(
-          `/search${qs({ q: term, type: scope === 'all' ? null : scope })}`,
+          `/search${qs({
+            q: term,
+            type: scope === 'all' ? null : scope,
+            field: field === 'any' ? null : field,
+          })}`,
         )
         if (seq.current === mine) { setLocal(res.local); setRemote(res.remote.slice(0, 8)) }
       } catch { /* leave whatever the quick pass found */ } finally {
@@ -80,7 +90,7 @@ export function Palette() {
       }
     }, 180)
     return () => clearTimeout(t)
-  }, [q, paletteOpen, scope])
+  }, [q, paletteOpen, scope, field])
 
   // Back dismisses the search rather than leaving the page behind it.
   useCloseOnBack(paletteOpen, () => setPaletteOpen(false))
@@ -179,6 +189,18 @@ export function Palette() {
               {SECTION_META[t].label}
             </button>
           ))}
+
+          {['album', 'track', 'podcast'].includes(scope) && (
+            <>
+              <span className="palette__sep" />
+              {([['any', 'Anything'], ['artist', 'Artist'], ['title', scope === 'track' ? 'Song' : 'Title']] as const)
+                .map(([v, label]) => (
+                  <button key={v} className={`chip${field === v ? ' is-on' : ''}`} onClick={() => setField(v)}>
+                    {label}
+                  </button>
+                ))}
+            </>
+          )}
         </div>
         <div className="palette__list">
           {local.length > 0 && <div className="palette__group u-caps">In your library</div>}

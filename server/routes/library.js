@@ -1052,6 +1052,110 @@ router.get('/creator/profile', async (req, res) => {
   })
 })
 
+/**
+ * Which seasons of a show you have watched.
+ *
+ * A series is not one thing you either saw or did not: people watch three
+ * seasons and stop, or come back years later for the new one. Entries have
+ * always carried a season number — imports fill it in — but there was no way
+ * to say so yourself, which left the information only as accurate as whatever
+ * export last touched it.
+ */
+router.get('/works/:id/seasons', async (req, res) => {
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+  if (work.type !== 'tv') return res.json({ seasons: [] })
+
+  const listed = work.tmdb_id ? await tmdb.seasons(work.tmdb_id).catch(() => []) : []
+  const mine = all(
+    `SELECT id, season, consumed_on, rating, progress FROM entries
+      WHERE work_id = ? ORDER BY ifnull(season, 0)`,
+    work.id,
+  )
+  const byNumber = new Map(mine.filter((e) => e.season != null).map((e) => [e.season, e]))
+
+  /*
+   * Where the provider knows nothing — no TMDB id, or a show it has not
+   * heard of — fall back to whatever the entries themselves mention, so the
+   * list is never empty for a show you have clearly watched.
+   */
+  const numbers = listed.length
+    ? listed.map((s) => s.number)
+    : [...new Set(mine.map((e) => e.season).filter((n) => n != null))].sort((a, b) => a - b)
+
+  res.json({
+    known: listed.length > 0,
+    // An entry with no season at all means "watched it" without saying which.
+    unspecified: mine.filter((e) => e.season == null).length,
+    seasons: numbers.map((n) => {
+      const info = listed.find((s) => s.number === n)
+      const entry = byNumber.get(n)
+      return {
+        number: n,
+        name: info?.name || `Season ${n}`,
+        episodes: info?.episodes ?? null,
+        year: info?.year ?? null,
+        air_date: info?.air_date ?? null,
+        poster_url: info?.poster_url ?? null,
+        watched: Boolean(entry),
+        entry_id: entry?.id ?? null,
+        consumed_on: entry?.consumed_on ?? null,
+        rating: entry?.rating ?? null,
+      }
+    }),
+  })
+})
+
+/**
+ * Tick seasons off, or un-tick them.
+ *
+ * Adding one creates an ordinary entry dated to when that season aired,
+ * since a series is usually watched around then and a date in the right year
+ * beats no date at all. Removing one deletes the entry it made — but never
+ * an entry carrying a rating or a review, because that is someone's own work
+ * and a checkbox should not throw it away.
+ */
+router.post('/works/:id/seasons', async (req, res) => {
+  const work = hydrate(get('SELECT * FROM works WHERE id = ?', Number(req.params.id)))
+  if (!work) return res.status(404).json({ error: 'Not found' })
+  if (work.type !== 'tv') return res.status(400).json({ error: 'Only shows have seasons' })
+
+  const wanted = new Set(
+    (Array.isArray(req.body?.seasons) ? req.body.seasons : [])
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0),
+  )
+
+  const listed = work.tmdb_id ? await tmdb.seasons(work.tmdb_id).catch(() => []) : []
+  const mine = all('SELECT id, season, rating, review FROM entries WHERE work_id = ?', work.id)
+  const byNumber = new Map(mine.filter((e) => e.season != null).map((e) => [e.season, e]))
+
+  let added = 0
+  let removed = 0
+  let kept = 0
+
+  for (const n of wanted) {
+    if (byNumber.has(n)) continue
+    const info = listed.find((s) => s.number === n)
+    run(
+      `INSERT INTO entries (user_id, work_id, status, consumed_on, season, progress, source)
+       VALUES (?, ?, 'completed', ?, ?, ?, 'manual')`,
+      currentUserId(req), work.id, info?.air_date || null, n,
+      info?.episodes ? `Season ${n} · ${info.episodes} episodes` : `Season ${n}`,
+    )
+    added++
+  }
+
+  for (const [n, entry] of byNumber) {
+    if (wanted.has(n)) continue
+    if (entry.rating != null || entry.review) { kept++; continue }
+    run('DELETE FROM entries WHERE id = ?', entry.id)
+    removed++
+  }
+
+  res.json({ ok: true, added, removed, keptBecauseRated: kept, work: workWithStats(work.id) })
+})
+
 /** Where to watch it, for film and TV. */
 router.get('/works/:id/watch', async (req, res) => {
   const work = get('SELECT id, type, tmdb_id, title FROM works WHERE id = ?', Number(req.params.id))
@@ -1244,8 +1348,10 @@ router.get('/search', async (req, res) => {
   if (req.query.remote !== '0') {
     try {
       const want = Math.min(60, Number(req.query.limit) || 12)
+      // "artist", "title" — for when the obvious search is swamped.
+      const field = ['artist', 'title'].includes(req.query.field) ? req.query.field : undefined
       remote = type
-        ? await searchProviders(type, q, want)
+        ? await searchProviders(type, q, want, { field })
         : await searchAllTypes(q, ['film', 'tv', 'book', 'audiobook', 'album'], Math.ceil(want / 4))
     } catch { remote = [] }
   }

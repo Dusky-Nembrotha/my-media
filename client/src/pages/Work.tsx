@@ -11,6 +11,7 @@ import { artworkUrl } from '../lib/img'
 import { ArtworkPicker } from '../components/ArtworkPicker'
 import { Preview } from '../components/Preview'
 import { CreatorSheet } from '../components/CreatorSheet'
+import { Seasons } from '../components/Seasons'
 import type { PreviewTarget } from '../components/Preview'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtDate, fmtRuntime, relDate, statusLabel } from '../lib/format'
@@ -210,6 +211,7 @@ export function WorkPage() {
 
         <aside className="workbody__side">
           <WhereToWatch workId={work.id} type={work.type} />
+          {work.type === 'tv' && <Seasons workId={work.id} onChanged={reload} />}
           <div className="card">
             <div className="u-caps" style={{ marginBottom: 10 }}>Details</div>
             <dl className="deflist">

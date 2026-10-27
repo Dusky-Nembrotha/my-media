@@ -112,7 +112,7 @@ export function bookNoise(title) {
   return null
 }
 
-export async function searchProviders(type, term, limit = 12) {
+export async function searchProviders(type, term, limit = 12, { field } = {}) {
   if (!term || !term.trim()) return []
   const jobs = []
 
@@ -135,14 +135,15 @@ export async function searchProviders(type, term, limit = 12) {
       jobs.push(ol.search(term, { limit: 6, type: 'audiobook' }))
       break
     case 'album':
-      jobs.push(itunes.search('album', term, limit))
-      jobs.push(mb.searchAlbums(term, 8))
+      jobs.push(itunes.search('album', term, limit, { field }))
+      // MusicBrainz takes a fielded query of its own.
+      jobs.push(mb.searchAlbums(field === 'artist' ? `artist:"${term}"` : term, 8))
       break
     case 'track':
-      jobs.push(itunes.search('track', term, limit))
+      jobs.push(itunes.search('track', term, limit, { field }))
       break
     case 'podcast':
-      jobs.push(itunes.search('podcast', term, limit))
+      jobs.push(itunes.search('podcast', term, limit, { field }))
       break
     case 'game':
       jobs.push(wiki.search('game', term, limit))
@@ -159,6 +160,17 @@ export async function searchProviders(type, term, limit = 12) {
    */
   const results = await gather(jobs, { deadline: 2600, enough: Math.min(6, limit) })
   let list = uniqueBy(results.filter(Boolean), fp)
+
+  /*
+   * Asking for a title means the title has to match. Searching "Gold" for an
+   * album otherwise returns everything by Adekunle Gold as readily as the
+   * record called Gold.
+   */
+  if (field === 'title') {
+    const want = normaliseTitle(term)
+    const matching = list.filter((h) => normaliseTitle(h.title).includes(want))
+    if (matching.length) list = matching
+  }
 
   if (type === 'book' || type === 'audiobook') {
     /*

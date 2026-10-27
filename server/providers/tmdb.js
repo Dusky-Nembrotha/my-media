@@ -353,3 +353,25 @@ export async function person(name) {
     return null
   }
 }
+
+/** A show's seasons, for ticking off the ones you have watched. */
+export async function seasons(id) {
+  if (!hasKey() || !id) return []
+  try {
+    const data = await fetchJson(url(`/tv/${id}`), { ttlSeconds: 60 * 60 * 24 * 7 })
+    return (data.seasons || [])
+      // Season zero is specials and extras, which nobody tracks as a season.
+      .filter((s) => (s.season_number ?? 0) > 0)
+      .map((s) => ({
+        number: s.season_number,
+        name: s.name || `Season ${s.season_number}`,
+        episodes: s.episode_count || null,
+        air_date: s.air_date || null,
+        year: parseYear(s.air_date),
+        poster_url: poster(s.poster_path, 'w342'),
+      }))
+      .sort((a, b) => a.number - b.number)
+  } catch {
+    return []
+  }
+}
