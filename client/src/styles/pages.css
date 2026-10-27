@@ -1224,6 +1224,28 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 .recactions .btn:first-child { flex: 1 1 auto; justify-content: center; min-width: 0; }
 .recactions .btn:last-child { flex: 0 0 auto; padding-inline: 8px; }
 
+/* Ticked off, and still on the page. A logged suggestion stays where it was
+   so the rating and the date are one tap away; it reads as done while it
+   waits, and the art steps back so it is not competing with what is left. */
+.hotcard.is-logged .poster__open { opacity: 0.58; }
+.hotcard.is-logged:hover .poster__open { opacity: 0.8; }
+.hotcard.is-logged .poster__title { color: var(--ink-2); }
+.recdone {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--good);
+  background: color-mix(in oklab, var(--good) 14%, transparent);
+}
+
 /* The portrait on a person's card. */
 .creatorface {
   flex: 0 0 auto;

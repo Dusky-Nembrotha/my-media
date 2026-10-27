@@ -43,9 +43,16 @@ export function Suggestions({ type }: { type: MediaType }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [hidden, setHidden] = useState<string[]>([])
+  /*
+   * Logged from here, and deliberately still on screen. Retiring a card the
+   * moment you tick it takes away the one thing you most often want next: the
+   * way back in to set a rating or correct the date. Dismissals do vanish —
+   * there the whole point is to not see it again. Cleared by Refresh.
+   */
+  const [marked, setMarked] = useState<Record<string, number>>({})
   const [logged, setLogged] = useState<LoggedThing | null>(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
-  // Which pick the sheet is showing, so logging from inside it retires the card.
+  // Which pick the sheet is showing, so logging from inside it marks the card.
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [sort, setSort] = useState<'match' | 'rating' | 'released'>('match')
   const [limit, setLimit] = useState(PAGE)
@@ -85,7 +92,7 @@ export function Suggestions({ type }: { type: MediaType }) {
       setLimit(want)
       // Fewer back than asked for means that is the whole ranking.
       setDone(res.picks.length < want)
-      if (force) setHidden([])
+      if (force) { setHidden([]); setMarked({}) }
     } catch (err) {
       toast((err as Error).message, 'error')
       if (want === limit) setData(null)
@@ -117,13 +124,14 @@ export function Suggestions({ type }: { type: MediaType }) {
           workId: res.work_id, entryId: res.entry_id, title: pick.title,
           type: pick.type, consumedOn: res.consumed_on,
         })
+        setMarked((m) => ({ ...m, [pick.fingerprint]: res.work_id }))
+        void refresh()
       } else {
         // Send the whole pick, not just its name: "no more of this sort of
         // thing" can only be learnt from what the thing was.
         await api.post('/recommendations/dismiss', { fingerprint: pick.fingerprint, reason: 'not interested', pick })
+        setHidden((h) => [...h, pick.fingerprint])
       }
-      setHidden((h) => [...h, pick.fingerprint])
-      if (what !== 'dismiss') void refresh()
     } catch (err) { toast((err as Error).message, 'error') } finally { setBusy(null) }
   }
 
@@ -167,7 +175,7 @@ export function Suggestions({ type }: { type: MediaType }) {
           target={preview}
           onClose={() => { setPreview(null); setPreviewOf(null) }}
           onLogged={(t) => {
-            if (previewOf) setHidden((h) => [...h, previewOf])
+            if (previewOf) setMarked((m) => ({ ...m, [previewOf]: t.workId }))
             setPreview(null); setPreviewOf(null); setLogged(t)
           }}
         />
@@ -231,7 +239,10 @@ export function Suggestions({ type }: { type: MediaType }) {
         <>
         <div className="grid" style={{ ['--card-w' as string]: meta.aspect === '1 / 1' ? '164px' : '150px' }}>
           {picks.map((pick, i) => (
-            <div key={pick.fingerprint} className="poster hotcard">
+            <div
+              key={pick.fingerprint}
+              className={`poster hotcard${marked[pick.fingerprint] != null ? ' is-logged' : ''}`}
+            >
               {/*
                 * A cover, a name and a way in — the same card Hot uses. Why it
                 * was picked, what it is about and where to watch it all live in
@@ -274,25 +285,41 @@ export function Suggestions({ type }: { type: MediaType }) {
                 </div>
               </div>
 
-              <div className="recactions">
-                <button
-                  className="btn btn--sm"
-                  disabled={busy === pick.fingerprint}
-                  onClick={() => act(pick, 'log')}
-                  title={`${meta.done} — open it to put it on your list instead`}
-                >
-                  <Icon name="check" size={13} /> {meta.done}
-                </button>
-                <button
-                  className="btn btn--sm btn--ghost"
-                  disabled={busy === pick.fingerprint}
-                  onClick={() => act(pick, 'dismiss')}
-                  title="Never suggest this again"
-                  aria-label={`Never suggest ${pick.title} again`}
-                >
-                  <Icon name="x" size={13} />
-                </button>
-              </div>
+              {marked[pick.fingerprint] != null ? (
+                /* Already in the library, still on the page — so the pencil,
+                   not the tick, is the thing left to press. */
+                <div className="recactions">
+                  <span className="recdone"><Icon name="check" size={13} /> {meta.done}</span>
+                  <Link
+                    className="btn btn--sm btn--ghost"
+                    to={`/work/${marked[pick.fingerprint]}`}
+                    title={`Edit your ${pick.title} entry`}
+                    aria-label={`Edit your ${pick.title} entry`}
+                  >
+                    <Icon name="pencil" size={13} />
+                  </Link>
+                </div>
+              ) : (
+                <div className="recactions">
+                  <button
+                    className="btn btn--sm"
+                    disabled={busy === pick.fingerprint}
+                    onClick={() => act(pick, 'log')}
+                    title={`${meta.done} — open it to put it on your list instead`}
+                  >
+                    <Icon name="check" size={13} /> {meta.done}
+                  </button>
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    disabled={busy === pick.fingerprint}
+                    onClick={() => act(pick, 'dismiss')}
+                    title="Never suggest this again"
+                    aria-label={`Never suggest ${pick.title} again`}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
