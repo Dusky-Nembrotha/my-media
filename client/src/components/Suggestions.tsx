@@ -37,8 +37,11 @@ export function Suggestions({ type }: { type: MediaType }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [hidden, setHidden] = useState<string[]>([])
+  const [added, setAdded] = useState<Record<string, true>>({})
   const [logged, setLogged] = useState<LoggedThing | null>(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
+  // Which pick the sheet is showing, so logging from inside it retires the card.
+  const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [sort, setSort] = useState<'match' | 'rating' | 'released'>('match')
   const [limit, setLimit] = useState(18)
   const [more, setMore] = useState(false)
@@ -93,7 +96,13 @@ export function Suggestions({ type }: { type: MediaType }) {
       } else {
         await api.post('/recommendations/dismiss', { fingerprint: pick.fingerprint, reason: 'not interested' })
       }
-      setHidden((h) => [...h, pick.fingerprint])
+      /*
+       * Something you have put on the list stays on screen wearing a flag,
+       * the way Hot does it. Pulling the card you just pressed out of the
+       * grid reflows everything below and loses your place.
+       */
+      if (what === 'save') setAdded((a) => ({ ...a, [pick.fingerprint]: true }))
+      else setHidden((h) => [...h, pick.fingerprint])
       if (what !== 'dismiss') void refresh()
     } catch (err) { toast((err as Error).message, 'error') } finally { setBusy(null) }
   }
@@ -118,8 +127,11 @@ export function Suggestions({ type }: { type: MediaType }) {
       {preview && (
         <Preview
           target={preview}
-          onClose={() => setPreview(null)}
-          onLogged={(t) => { setPreview(null); setLogged(t) }}
+          onClose={() => { setPreview(null); setPreviewOf(null) }}
+          onLogged={(t) => {
+            if (previewOf) setHidden((h) => [...h, previewOf])
+            setPreview(null); setPreviewOf(null); setLogged(t)
+          }}
         />
       )}
 
@@ -158,7 +170,9 @@ export function Suggestions({ type }: { type: MediaType }) {
       )}
 
       {loading ? (
-        <div className="grid grid--wide">{Array.from({ length: 8 }, (_, i) => <PosterSkeleton key={i} aspect={meta.aspect} />)}</div>
+        <div className="grid" style={{ ['--card-w' as string]: meta.aspect === '1 / 1' ? '164px' : '150px' }}>
+          {Array.from({ length: 12 }, (_, i) => <PosterSkeleton key={i} aspect={meta.aspect} />)}
+        </div>
       ) : !picks.length ? (
         <Empty
           icon="sparkle"
@@ -171,52 +185,70 @@ export function Suggestions({ type }: { type: MediaType }) {
         </Empty>
       ) : (
         <>
-        <div className="recgrid">
-          {picks.map((pick) => (
-            <article key={pick.fingerprint} className="reccard">
-              {/* The artwork opens the same sheet every other card does. */}
+        <div className="grid" style={{ ['--card-w' as string]: meta.aspect === '1 / 1' ? '164px' : '150px' }}>
+          {picks.map((pick, i) => (
+            <div key={pick.fingerprint} className="poster hotcard">
+              {/*
+                * A cover, a name and a way in — the same card Hot uses. Why it
+                * was picked, what it is about and where to watch it all live in
+                * the sheet, because eighteen of those at once is a wall of text
+                * nobody reads and the grid could not lay out.
+                */}
               <button
                 type="button"
-                className="reccard__art poster__open"
-                onClick={() => setPreview({
-                  type: pick.type,
-                  title: pick.title,
-                  year: pick.year,
-                  creator: pick.creators?.[0]?.name ?? null,
-                })}
+                className="poster__open"
+                onClick={() => {
+                  setPreviewOf(pick.fingerprint)
+                  setPreview({
+                    type: pick.type,
+                    title: pick.title,
+                    year: pick.year,
+                    creator: pick.creators?.[0]?.name ?? null,
+                    reasons: pick.reasons,
+                  })
+                }}
                 title={`What is ${pick.title}?`}
               >
+                <span className="hotrank u-tnum">{i + 1}</span>
+                {pick.external_rating != null && (
+                  <span
+                    className="recscore u-tnum"
+                    title={`Rated ${pick.external_rating.toFixed(1)} out of 10${pick.provider ? ` by ${pick.provider}` : ''}`
+                      + (pick.predicted != null ? ` · we think you would give it ${pick.predicted.toFixed(1)}` : '')}
+                  >
+                    <Icon name="star" size={10} strokeWidth={0} />
+                    {pick.external_rating.toFixed(1)}
+                  </span>
+                )}
                 <PosterArt src={pick.poster_url} title={pick.title} type={pick.type} aspect={meta.aspect} />
               </button>
-              <div className="reccard__body">
-                <div className="u-col" style={{ gap: 3 }}>
-                  <h3 style={{ fontSize: 15.5, letterSpacing: '-0.015em' }}>{pick.title}</h3>
-                  <span className="u-xs u-mut">
-                    {[pick.year, creatorLine(pick.creators, 2)].filter(Boolean).join(' · ')}
-                  </span>
+
+              <div className="poster__meta">
+                <div className="poster__title">{pick.title}</div>
+                <div className="poster__sub u-trunc">
+                  {[pick.year, creatorLine(pick.creators, 1)].filter(Boolean).join(' \u00b7 ')}
                 </div>
-                <div className="chiprow">
-                  {pick.reasons.map((r, i) => (
-                    <span key={i} className="chip chip--why"><Icon name="sparkle" size={11} /> {r}</span>
-                  ))}
-                </div>
-                {pick.genres.length > 0 && (
-                  <span className="u-xs u-mut u-trunc">{pick.genres.slice(0, 3).join(' · ')}</span>
-                )}
-                {pick.overview && <p className="u-xs u-clamp-3" style={{ margin: 0, color: 'var(--ink-3)' }}>{pick.overview}</p>}
-                <div className="u-row u-wrap" style={{ gap: 6, marginTop: 'auto' }}>
-                  <button className="btn btn--sm btn--primary" disabled={busy === pick.fingerprint} onClick={() => act(pick, 'save')}>
-                    <Icon name="inbox" size={13} /> {meta.planned}
+              </div>
+
+              {added[pick.fingerprint] ? (
+                <span className="hotflag">On your list</span>
+              ) : (
+                <div className="recactions">
+                  <button className="btn btn--sm" disabled={busy === pick.fingerprint} onClick={() => act(pick, 'save')}>
+                    <Icon name="plus" size={13} /> {meta.planned}
                   </button>
-                  <button className="btn btn--sm" disabled={busy === pick.fingerprint} onClick={() => act(pick, 'log')}>
-                    <Icon name="check" size={13} /> {meta.done}
-                  </button>
-                  <button className="btn btn--sm btn--ghost" disabled={busy === pick.fingerprint} onClick={() => act(pick, 'dismiss')} title="Never suggest this again">
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    disabled={busy === pick.fingerprint}
+                    onClick={() => act(pick, 'dismiss')}
+                    title="Never suggest this again"
+                    aria-label={`Never suggest ${pick.title} again`}
+                  >
                     <Icon name="x" size={13} />
                   </button>
                 </div>
-              </div>
-            </article>
+              )}
+            </div>
           ))}
         </div>
 

@@ -331,11 +331,6 @@ a.actrow:hover { background: var(--surface-2); }
 }
 
 /* ============================================================ recommendations */
-.recgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 16px;
-}
 .reccard {
   display: flex;
   gap: 14px;
@@ -346,17 +341,6 @@ a.actrow:hover { background: var(--surface-2); }
   transition: border-color var(--fast), background var(--fast), transform var(--fast);
 }
 .reccard:hover { border-color: var(--hairline-strong); background: var(--surface-2); }
-.reccard__art {
-  width: 92px;
-  flex: 0 0 auto;
-  /* It became a button so the artwork could open the sheet; a button brings
-     its own padding, text alignment and font with it. */
-  padding: 0;
-  text-align: left;
-  font: inherit;
-  align-self: flex-start;
-}
-.reccard__body { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1 1 auto; }
 .reccard--row { align-items: flex-start; }
 .reccard__actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; align-items: stretch; }
 .reccard--row.is-priority { border-color: var(--accent-line); background: color-mix(in oklab, var(--accent) 5%, var(--surface-1)); }
@@ -620,7 +604,6 @@ code {
 
 @media (max-width: 620px) {
   .chartgrid { grid-template-columns: minmax(0, 1fr); }
-  .recgrid { grid-template-columns: minmax(0, 1fr); }
   .hbar { grid-template-columns: 88px minmax(0, 1fr) auto; }
   .workhero__rate { gap: 14px; }
 
@@ -1165,7 +1148,7 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
 
 /* A cover you can open even when the thing is not in your library.
    :where() keeps this at zero specificity so it stays a reset: a card that
-   states its own thumbnail width (.reccard__art, .findrow__art) keeps it
+   states its own thumbnail width (.findrow__art) keeps it
    rather than being stretched to the full column by whichever rule happens
    to be written last. */
 :where(.poster__open) { display: block; width: 100%; padding: 0; text-align: left; }
@@ -1214,6 +1197,32 @@ a.pubrating:hover { border-color: var(--accent-line); background: rgba(10, 9, 12
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
 }
 .hotscore__mark { font-size: 8.5px; font-weight: 800; letter-spacing: 0.04em; opacity: 0.72; }
+
+/* The same corner, for a score that is not IMDb's and so must not wear its
+   yellow — a suggestion carries whatever its own source rated it. */
+.recscore {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 640;
+  color: var(--ink);
+  background: rgba(10, 9, 12, 0.72);
+  backdrop-filter: blur(6px);
+}
+.recscore svg { color: var(--star); fill: var(--star); }
+
+/* Add it, or never see it again — the two things worth doing without opening
+   the card. Everything else is a tap away in the sheet. */
+.recactions { display: flex; gap: 6px; margin-top: 6px; }
+.recactions .btn:first-child { flex: 1 1 auto; justify-content: center; min-width: 0; }
+.recactions .btn:last-child { flex: 0 0 auto; padding-inline: 8px; }
 
 /* The portrait on a person's card. */
 .creatorface {

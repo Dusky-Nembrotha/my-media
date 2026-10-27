@@ -16,6 +16,8 @@ export interface PreviewTarget {
   creator?: string | null
   /** A date to inherit when adding — the rest of a series read in one run. */
   consumedOn?: string | null
+  /** Why the engine put this in front of you, when it came from Suggestions. */
+  reasons?: string[]
 }
 
 interface Provider { name: string; logo?: string | null }
@@ -213,6 +215,18 @@ export function Preview({ target, onClose, onLogged }: {
                 ) : null}
               </div>
             </div>
+
+            {/* The case for it, carried in from whichever list sent you here. */}
+            {target.reasons?.length ? (
+              <div className="u-col" style={{ gap: 7 }}>
+                <span className="u-caps">Why you are seeing this</span>
+                <div className="chiprow">
+                  {target.reasons.map((r, i) => (
+                    <span key={i} className="chip chip--why"><Icon name="sparkle" size={11} /> {r}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {p?.overview ? (
               <p className="u-sm" style={{ margin: 0, lineHeight: 1.6, color: 'var(--ink-2)' }}>{p.overview}</p>
