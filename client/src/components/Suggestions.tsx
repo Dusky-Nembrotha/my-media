@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from './Icon'
 import { PosterArt, PosterSkeleton } from './Poster'
@@ -11,6 +11,8 @@ import { api } from '../lib/api'
 import { useApp } from '../lib/store'
 import { SECTION_META, creatorLine } from '../lib/format'
 import type { MediaType, Pick } from '../lib/types'
+
+const PAGE = 18
 
 interface RecResponse {
   type: MediaType
@@ -37,14 +39,18 @@ export function Suggestions({ type }: { type: MediaType }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [hidden, setHidden] = useState<string[]>([])
-  const [added, setAdded] = useState<Record<string, true>>({})
   const [logged, setLogged] = useState<LoggedThing | null>(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
   // Which pick the sheet is showing, so logging from inside it retires the card.
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [sort, setSort] = useState<'match' | 'rating' | 'released'>('match')
-  const [limit, setLimit] = useState(18)
+  const [limit, setLimit] = useState(PAGE)
   const [more, setMore] = useState(false)
+  // The ranking runs out eventually; stop asking once it has.
+  const [done, setDone] = useState(false)
+
+  const sentinel = useRef<HTMLDivElement>(null)
+  const inFlight = useRef(false)
 
   /*
    * Asking for more is a bigger slice of the same ranking, not a different
@@ -52,6 +58,9 @@ export function Suggestions({ type }: { type: MediaType }) {
    * their places and the new ones land underneath.
    */
   const load = async (force = false, want = limit) => {
+    // The observer can fire twice before the first answer lands.
+    if (inFlight.current) return
+    inFlight.current = true
     if (want > limit) setMore(true)
     else setLoading(true)
     try {
@@ -70,22 +79,33 @@ export function Suggestions({ type }: { type: MediaType }) {
         return { ...res, picks: [...kept, ...res.picks.filter((p) => !seen.has(p.fingerprint))] }
       })
       setLimit(want)
+      // Fewer back than asked for means that is the whole ranking.
+      setDone(res.picks.length < want)
       if (force) setHidden([])
     } catch (err) {
       toast((err as Error).message, 'error')
       if (want === limit) setData(null)
-    } finally { setLoading(false); setMore(false) }
+      // Don't spin on a failing endpoint as the page scrolls.
+      setDone(true)
+    } finally { inFlight.current = false; setLoading(false); setMore(false) }
   }
 
-  useEffect(() => { setLimit(18); void load(false, 18) }, [type])
+  useEffect(() => {
+    setLimit(PAGE); setDone(false); inFlight.current = false
+    void load(false, PAGE)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type])
 
-  async function act(pick: Pick, what: 'save' | 'log' | 'dismiss') {
+  /*
+   * The card offers the one answer a suggestion usually wants — yes, I have
+   * had this — and nothing else. Putting it on the list instead is a rarer
+   * decision that deserves the sheet, where you can see what you are agreeing
+   * to before you agree to it.
+   */
+  async function act(pick: Pick, what: 'log' | 'dismiss') {
     setBusy(pick.fingerprint)
     try {
-      if (what === 'save') {
-        await api.post('/recommendations/save', { pick })
-        toast(`${pick.title} added to ${meta.planned.toLowerCase()}`)
-      } else if (what === 'log') {
+      if (what === 'log') {
         const res = await api.post<{ work_id: number; entry_id: number; consumed_on: string | null }>(
           '/recommendations/log', { pick },
         )
@@ -96,13 +116,7 @@ export function Suggestions({ type }: { type: MediaType }) {
       } else {
         await api.post('/recommendations/dismiss', { fingerprint: pick.fingerprint, reason: 'not interested' })
       }
-      /*
-       * Something you have put on the list stays on screen wearing a flag,
-       * the way Hot does it. Pulling the card you just pressed out of the
-       * grid reflows everything below and loses your place.
-       */
-      if (what === 'save') setAdded((a) => ({ ...a, [pick.fingerprint]: true }))
-      else setHidden((h) => [...h, pick.fingerprint])
+      setHidden((h) => [...h, pick.fingerprint])
       if (what !== 'dismiss') void refresh()
     } catch (err) { toast((err as Error).message, 'error') } finally { setBusy(null) }
   }
@@ -120,6 +134,24 @@ export function Suggestions({ type }: { type: MediaType }) {
   })()
   const picks = ordered
   const needsTmdb = (type === 'film' || type === 'tv') && !settings.has_tmdb
+
+  /*
+   * Top up as the bottom comes into view. Reaching the end of a list is
+   * itself the request for more of it; a button only makes you say so twice.
+   * The margin asks early enough that the next screenful is usually there
+   * before you arrive at it.
+   */
+  useEffect(() => {
+    const node = sentinel.current
+    if (!node || done || loading || more) return
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0]?.isIntersecting) void load(false, limit + PAGE) },
+      { rootMargin: '600px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done, loading, more, limit, picks.length])
 
   return (
     <>
@@ -230,34 +262,42 @@ export function Suggestions({ type }: { type: MediaType }) {
                 </div>
               </div>
 
-              {added[pick.fingerprint] ? (
-                <span className="hotflag">On your list</span>
-              ) : (
-                <div className="recactions">
-                  <button className="btn btn--sm" disabled={busy === pick.fingerprint} onClick={() => act(pick, 'save')}>
-                    <Icon name="plus" size={13} /> {meta.planned}
-                  </button>
-                  <button
-                    className="btn btn--sm btn--ghost"
-                    disabled={busy === pick.fingerprint}
-                    onClick={() => act(pick, 'dismiss')}
-                    title="Never suggest this again"
-                    aria-label={`Never suggest ${pick.title} again`}
-                  >
-                    <Icon name="x" size={13} />
-                  </button>
-                </div>
-              )}
+              <div className="recactions">
+                <button
+                  className="btn btn--sm"
+                  disabled={busy === pick.fingerprint}
+                  onClick={() => act(pick, 'log')}
+                  title={`${meta.done} — open it to put it on your list instead`}
+                >
+                  <Icon name="check" size={13} /> {meta.done}
+                </button>
+                <button
+                  className="btn btn--sm btn--ghost"
+                  disabled={busy === pick.fingerprint}
+                  onClick={() => act(pick, 'dismiss')}
+                  title="Never suggest this again"
+                  aria-label={`Never suggest ${pick.title} again`}
+                >
+                  <Icon name="x" size={13} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* There is always more of the ranking below; this just asks for it. */}
-        <div style={{ display: 'grid', placeItems: 'center', marginTop: 24 }}>
-          <button className="btn" onClick={() => load(false, limit + 18)} disabled={more || loading}>
-            {more ? 'Finding more…' : 'Show more suggestions'}
-          </button>
-        </div>
+        <div ref={sentinel} style={{ height: 1 }} />
+
+        {more && (
+          <div className="grid" style={{ ['--card-w' as string]: meta.aspect === '1 / 1' ? '164px' : '150px', marginTop: 14 }}>
+            {Array.from({ length: 6 }, (_, i) => <PosterSkeleton key={i} aspect={meta.aspect} />)}
+          </div>
+        )}
+
+        {done && picks.length > PAGE && (
+          <p className="u-xs u-mut" style={{ textAlign: 'center', marginTop: 20 }}>
+            That is everything worth putting in front of you.
+          </p>
+        )}
         </>
       )}
     </>
