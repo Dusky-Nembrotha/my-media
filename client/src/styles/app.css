@@ -724,6 +724,30 @@ kbd {
   /* The brand lays its mark and name out in a row, not a grid. */
   .floatbar__brand.only-mobile { display: flex; }
 
+  /*
+   * On a phone only the name and the search stay put, and they sit on
+   * something solid.
+   *
+   * A phone screen is too short to give two rows of furniture permanent
+   * residence: the filter row and the chip bars were pinned as well, which
+   * cost a third of the view before a single book. Worse, all of it was
+   * transparent, so covers scrolled underneath the words and the whole top
+   * of the screen became unreadable. Everything but the bar scrolls away now.
+   */
+  .floatbar {
+    background: var(--canvas);
+    border-bottom: 1px solid var(--hairline);
+    padding-top: max(14px, env(safe-area-inset-top));
+    /* Opaque means it has to catch the taps it covers, rather than passing
+       them to whatever is sliding past underneath. */
+    pointer-events: auto;
+  }
+  .toolbar,
+  .filterbar {
+    position: static;
+    background: none;
+  }
+
   .tabbar {
     position: fixed;
     bottom: 0;

@@ -103,3 +103,17 @@ createRoot(document.getElementById('root')!).render(
     <Root />
   </StrictMode>,
 )
+
+/*
+ * Register the service worker, which is what makes the app installable.
+ *
+ * Only in a built app: under the dev server there is no worker to fetch, and
+ * a registration that 404s is noise. Failure is not worth reporting — the app
+ * works exactly the same without it, it simply cannot be added to a home
+ * screen.
+ */
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {})
+  })
+}

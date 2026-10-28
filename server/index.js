@@ -65,6 +65,18 @@ if (existsSync(dist)) {
     }
   } catch { /* a missing index.html is handled below */ }
 
+  /*
+   * The worker and the manifest are how a new version announces itself, so
+   * they must never inherit the year-long cache below — a stale copy of
+   * either would pin the installed app to an old build with no way back.
+   */
+  for (const file of ['sw.js', 'manifest.webmanifest']) {
+    app.get(`${BASE}/${file}`, (req, res) => {
+      res.set('Cache-Control', 'no-cache, must-revalidate')
+      res.sendFile(join(dist, file))
+    })
+  }
+
   // Asset filenames carry a content hash, so they can be cached hard.
   app.use(BASE || '/', express.static(dist, { maxAge: '1y', immutable: true, index: false }))
 

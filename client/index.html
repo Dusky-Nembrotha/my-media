@@ -6,6 +6,16 @@
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#0a0b0e" />
     <title>Shelved</title>
+    <!-- Installable: %BASE_URL% is substituted at build time, because this file
+         is also served for deep routes like /media/work/42, where a relative
+         href would resolve against the wrong folder. -->
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Shelved" />
+    <meta name="application-name" content="Shelved" />
+    <meta name="description" content="A log of everything you watch, read and listen to." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a090c'/%3E%3Crect x='5' y='9' width='4.2' height='15' rx='1.2' fill='%23afadb8'/%3E%3Crect x='10.6' y='12.5' width='4.2' height='11.5' rx='1.2' fill='%237b7986'/%3E%3Crect x='16.2' y='6.5' width='4.2' height='17.5' rx='1.2' fill='%23f472b6'/%3E%3Crect x='22.2' y='10' width='4.2' height='14' rx='1.2' fill='%23afadb8' transform='rotate(13 24.3 24)'/%3E%3Crect x='2.5' y='24.5' width='27' height='3.2' rx='1.6' fill='%23f3f2f5'/%3E%3C/svg%3E" />
   </head>
   <body>
