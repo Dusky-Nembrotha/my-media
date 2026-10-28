@@ -101,6 +101,12 @@ export function filesFor(importer, files) {
     const roled = files.filter((f) => letterboxd.roleForFilename(f.filename))
     if (roled.length) return roled
   }
+  if (importer.id === 'audible') {
+    // Most of an Audible export is telemetry that happens to carry a product
+    // name; reading it all counted every playback event as a book.
+    const relevant = files.filter((f) => audible.relevantFilename(f.filename))
+    if (relevant.length) return relevant
+  }
   if (importer.id === 'spotify') {
     const relevant = files.filter((f) =>
       /streaming_history|streaminghistory|yourlibrary|playlist/i.test(f.filename))
