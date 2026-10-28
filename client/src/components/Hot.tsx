@@ -132,7 +132,9 @@ export function Hot({ type }: { type: MediaType }) {
     return (
       <Empty icon="sparkle" title={`No chart for ${meta.label.toLowerCase()}`}>
         {unsupported
-          ? 'There is no free source for what is popular in games, and inventing one would be worse than saying so.'
+          ? 'BoardGameGeek keep exactly this list and nobody else does, and their API now turns away '
+            + 'anonymous requests. Add a key in Connections and this fills itself in; inventing a chart '
+            + 'out of something that is not one would be worse than saying so.'
           : 'The source is quiet at the moment. Try again later.'}
       </Empty>
     )

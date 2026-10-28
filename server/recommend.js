@@ -1,7 +1,7 @@
 import { all, get, run, json } from './lib/db.js'
 import { normaliseTitle, decade, uniqueBy, clamp } from './lib/util.js'
 import { systemUserId } from './lib/user.js'
-import { tmdb, itunes, ol, mb, tvmaze, wiki, gbooks, bookNoise } from './providers/index.js'
+import { tmdb, itunes, ol, mb, tvmaze, wiki, gbooks, steam, bookNoise } from './providers/index.js'
 import { coverUrl } from './providers/openlibrary.js'
 import * as wikidata from './providers/wikidata.js'
 import * as cf from './lib/cf.js'
@@ -817,6 +817,19 @@ export async function candidatesForType(type, profile, { breadth = 1, crowd = nu
     for (const g of genres.slice(0, 3)) {
       push(await itunes.search('podcast', g.display || g.key.replace('genre:', ''), 10), 'genre', g.support[0], g.key, g.display)
     }
+  }
+
+  if (type === 'game') {
+    /*
+     * The week's most-played, as a pool to rank your taste against.
+     *
+     * The Wikidata path below only fires for people you already rate highly,
+     * which is nothing at all until a few games are logged. This gives the
+     * engine a catalogue to reason about from the first game onwards. Steam
+     * is one storefront and so one view of the medium, but it is the only
+     * free one, and the scoring still has to agree before anything is shown.
+     */
+    push(await steam.charts({ limit: Math.round(40 * breadth) }), 'genre', null, null, null)
   }
 
   // Keyless film/TV/game: Wikidata knows the full catalogue of everyone you rate highly.

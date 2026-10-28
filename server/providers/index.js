@@ -10,9 +10,10 @@ import * as omdb from './omdb.js'
 import * as gbooks from './googlebooks.js'
 import * as imdbdata from './imdbdata.js'
 import * as boardgame from './boardgame.js'
+import * as steam from './steam.js'
 import { normaliseTitle, uniqueBy } from '../lib/util.js'
 
-export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks, imdbdata, boardgame }
+export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks, imdbdata, boardgame, steam }
 
 const fp = (c) => `${c.type}|${normaliseTitle(c.title)}|${c.year || ''}`
 
