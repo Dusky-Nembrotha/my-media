@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { FormatPick, BookFormat } from '../components/FormatPick'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { Stars } from '../components/Stars'
@@ -363,7 +364,7 @@ function EntryEditor({ entry, type, releaseDate, onClose, onSaved, onDelete }: {
   const [progress, setProgress] = useState(entry.progress || '')
   const [repeat, setRepeat] = useState(entry.is_repeat)
   const [liked, setLiked] = useState(entry.liked)
-  const [format, setFormat] = useState<string>(entry.format || 'book')
+  const [format, setFormat] = useState<BookFormat>((entry.format as BookFormat) || 'book')
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -428,11 +429,7 @@ function EntryEditor({ entry, type, releaseDate, onClose, onSaved, onDelete }: {
           </div>
         </div>
         <div className="chiprow">
-          {type === 'book' && ([['book', 'Read'], ['audiobook', 'Listened'], ['both', 'Both']] as const).map(([v, label]) => (
-            <button key={v} className={`chip${format === v ? ' is-on' : ''}`} onClick={() => setFormat(v)}>
-              <Icon name={v === 'audiobook' ? 'headphones' : 'book'} size={13} /> {label}
-            </button>
-          ))}
+          {type === 'book' && <FormatPick value={format} onChange={setFormat} />}
           <button className={`chip${repeat ? ' is-on' : ''}`} onClick={() => setRepeat((v) => !v)}>
             <Icon name="repeat" size={13} /> {type === 'book' || type === 'audiobook' ? 'Reread' : 'Rewatch'}
           </button>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { FormatPick, type BookFormat } from './FormatPick'
 import { useNavigate } from 'react-router-dom'
 import { Modal } from './Modal'
 import { Stars } from './Stars'
@@ -59,7 +60,7 @@ export function LogDialog() {
   const [liked, setLiked] = useState(false)
   const [progress, setProgress] = useState('')
   // Read it, listened to it, or some of each. Only books are asked.
-  const [format, setFormat] = useState<'book' | 'audiobook' | 'both'>('book')
+  const [format, setFormat] = useState<BookFormat>('book')
 
   // watchlist fields
   const [recommender, setRecommender] = useState('')
@@ -485,16 +486,7 @@ export function LogDialog() {
               </button>
               {effectiveType === 'book' && (
                 <span className="formatpick">
-                  {([['book', 'Read'], ['audiobook', 'Listened'], ['both', 'Both']] as const).map(([v, label]) => (
-                    <button
-                      key={v}
-                      className={`chip${format === v ? ' is-on' : ''}`}
-                      onClick={() => setFormat(v)}
-                      title={v === 'both' ? 'Read some and listened to some' : `You ${label.toLowerCase()} it`}
-                    >
-                      <Icon name={v === 'audiobook' ? 'headphones' : 'book'} size={13} /> {label}
-                    </button>
-                  ))}
+                  <FormatPick value={format} onChange={setFormat} />
                 </span>
               )}
               <button className={`chip${repeat ? ' is-on' : ''}`} onClick={() => setRepeat((v) => !v)}>
