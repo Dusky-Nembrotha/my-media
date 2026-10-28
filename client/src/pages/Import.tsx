@@ -42,6 +42,9 @@ export function ImportPage() {
   const [chosen, setChosen] = useState<string | null>(null)
   const [options, setOptions] = useState<Record<string, any>>({})
   const [busy, setBusy] = useState(false)
+  // How much of the upload has left the browser, so a slow tunnel looks slow
+  // rather than broken. Null once the server has it and is thinking.
+  const [sent, setSent] = useState<number | null>(null)
   const [dragging, setDragging] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [enrich, setEnrich] = useState<any>(null)
@@ -65,9 +68,10 @@ export function ImportPage() {
     const form = new FormData()
     for (const f of Array.from(files)) form.append('files', f)
     setBusy(true)
+    setSent(0)
     setResult(null)
     try {
-      const res = await api.upload<Analysis>('/import/analyse', form)
+      const res = await api.upload<Analysis>('/import/analyse', form, (f) => setSent(f < 1 ? f : null))
       setAnalysis(res)
       setChosen(res.detected)
       const cand = res.candidates.find((c) => c.id === res.detected)
@@ -76,7 +80,7 @@ export function ImportPage() {
       setOptions(opts)
     } catch (err) {
       toast((err as Error).message, 'error')
-    } finally { setBusy(false) }
+    } finally { setBusy(false); setSent(null) }
   }
 
   async function runImport() {
@@ -151,7 +155,11 @@ export function ImportPage() {
               picked out automatically. CSV, TSV and JSON too. Nothing leaves this machine.
             </p>
             <div className="u-row u-wrap" style={{ gap: 8, justifyContent: 'center' }}>
-              <span className="btn btn--primary">{busy ? 'Reading…' : 'Choose files'}</span>
+              <span className="btn btn--primary">
+                {!busy ? 'Choose files'
+                  : sent != null ? `Uploading ${Math.round(sent * 100)}%`
+                    : 'Reading…'}
+              </span>
               {sources.data?.sampleAvailable && (
                 <button
                   className="btn"

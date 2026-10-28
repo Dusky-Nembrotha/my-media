@@ -45,6 +45,16 @@ router.get('/import/sources', (req, res) => {
 
 /** Step 1: work out what was uploaded and preview what would happen. */
 router.post('/import/analyse', async (req, res) => {
+  /*
+   * Uploads are the one request here that can take a visible amount of time,
+   * and the one most likely to be blamed on the app when it is the network.
+   * Logging arrival and completion makes "is it stuck?" answerable.
+   */
+  const began = Date.now()
+  const announced = Number(req.headers['content-length']) || 0
+  console.log(`  import: upload started, ${(announced / 1048576).toFixed(1)}MB announced`)
+  req.on('aborted', () => console.log(`  import: upload ABORTED by the client after ${Date.now() - began}ms`))
+
   sweep()
   try {
     const { files: uploads } = await receive(req)
@@ -79,6 +89,7 @@ router.post('/import/analyse', async (req, res) => {
       }
     }
 
+    console.log(`  import: ${members.length} files, detected ${best?.id || 'generic'}, in ${Date.now() - began}ms`)
     res.json({
       token,
       files: members.map((m) => ({
@@ -94,6 +105,7 @@ router.post('/import/analyse', async (req, res) => {
       mapping: guessMapping(members.find((m) => m.headers)?.headers || []),
     })
   } catch (err) {
+    console.log(`  import: FAILED after ${Date.now() - began}ms — ${err.message}`)
     res.status(400).json({ error: err.message })
   }
 })

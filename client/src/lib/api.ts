@@ -26,7 +26,37 @@ export const api = {
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
-  upload: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
+  /*
+   * Uploads go through XMLHttpRequest rather than fetch, which cannot report
+   * how far a request body has got. A ten-megabyte export over a tunnel takes
+   * long enough that a motionless "Reading…" is indistinguishable from a
+   * hang — and there was no timeout either, so a stalled connection waited
+   * for ever rather than saying so.
+   */
+  upload: <T>(path: string, form: FormData, onProgress?: (fraction: number) => void) =>
+    new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', BASE + path)
+      xhr.withCredentials = true
+      xhr.timeout = 10 * 60 * 1000
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(e.loaded / e.total)
+      }
+      xhr.onload = () => {
+        const text = xhr.responseText
+        let data: any = null
+        if (text) { try { data = JSON.parse(text) } catch { data = { error: text } } }
+        if (xhr.status === 401 && data?.unauthenticated) {
+          window.dispatchEvent(new CustomEvent('mm-unauthenticated'))
+        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data as T)
+        else reject(new Error(data?.error || `Request failed (${xhr.status})`))
+      }
+      xhr.onerror = () => reject(new Error('The upload never reached the server — check the connection and try again.'))
+      xhr.ontimeout = () => reject(new Error('The upload timed out after ten minutes.'))
+      xhr.onabort = () => reject(new Error('The upload was cancelled.'))
+      xhr.send(form)
+    }),
 }
 
 export function qs(params: Record<string, string | number | boolean | null | undefined>) {
