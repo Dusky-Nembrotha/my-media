@@ -1,7 +1,7 @@
 import { all, get, run, json } from './lib/db.js'
 import { normaliseTitle, decade, uniqueBy, clamp } from './lib/util.js'
 import { systemUserId } from './lib/user.js'
-import { tmdb, itunes, ol, mb, tvmaze, wiki, gbooks, steam, bookNoise } from './providers/index.js'
+import { tmdb, itunes, ol, mb, tvmaze, wiki, gbooks, steam, boardgame, bookNoise } from './providers/index.js'
 import { coverUrl } from './providers/openlibrary.js'
 import * as wikidata from './providers/wikidata.js'
 import * as cf from './lib/cf.js'
@@ -480,6 +480,8 @@ const ROLE_FOR_TYPE = {
   audiobook: ['Author', 'Narrator'],
   album: ['Artist'],
   game: ['Developer'],
+  // The credit that matters on a board game, and the one DBpedia records.
+  boardgame: ['Designer'],
   podcast: ['Publisher'],
 }
 
@@ -564,12 +566,32 @@ function knownTmdbIds(type) {
 export async function candidatesForType(type, profile, { breadth = 1, crowd = null } = {}) {
   const out = []
   const roles = ROLE_FOR_TYPE[type] || ['Creator']
-  const creators = profile.topCreators
-    .filter((c) => {
-      const { role } = parseCreatorKey(c.key)
-      return c.types.includes(type) && roles.includes(role) && role !== 'Cast'
-    })
-    .slice(0, Math.round(6 * breadth))
+  const ofType = (c) => {
+    const { role } = parseCreatorKey(c.key)
+    return c.types.includes(type) && roles.includes(role) && role !== 'Cast'
+  }
+
+  let creators = profile.topCreators.filter(ofType).slice(0, Math.round(6 * breadth))
+
+  /*
+   * A new shelf has nothing with four works behind it.
+   *
+   * MIN_SUPPORT asks for four before an attribute may drive the list, which
+   * is the right bar on six hundred films — one shared director out of two
+   * hundred is a coincidence. On a shelf of two board games it is unreachable
+   * by definition, so nothing is ever suggested and nothing ever can be: you
+   * would need four games by one designer before the engine said a word.
+   *
+   * So where the usual seeds come back empty, take the best of what little
+   * there is. The scoring downstream still has to agree, and a pick resting
+   * on one game says so in its reason.
+   */
+  if (!creators.length) {
+    creators = [...profile.attrs.values()]
+      .filter((a) => a.key.startsWith('creator:') && a.score > 0 && ofType(a))
+      .sort((a, b) => b.score * b.confidence - a.score * a.confidence)
+      .slice(0, Math.round(3 * breadth))
+  }
   const genres = profile.topGenres
     .filter((g) => g.types.includes(type))
     .filter((g) => !TOO_BROAD.test(g.display || '') && !JUVENILE.test(g.key))
@@ -816,6 +838,38 @@ export async function candidatesForType(type, profile, { breadth = 1, crowd = nu
   if (type === 'podcast') {
     for (const g of genres.slice(0, 3)) {
       push(await itunes.search('podcast', g.display || g.key.replace('genre:', ''), 10), 'genre', g.support[0], g.key, g.display)
+    }
+  }
+
+  if (type === 'boardgame') {
+    /*
+     * Who designed it is the whole signal.
+     *
+     * A Knizia and a Feld feel nothing like each other, and people who like
+     * one tend to like the rest of theirs — it is the board game equivalent
+     * of a director, and far stronger than a publisher or a shelf label.
+     * Nothing else here is worth asking: Wikidata records no mechanics and
+     * BoardGameGeek, which records all of them, is closed.
+     */
+    /*
+     * Titles are a poor way to tell board games apart: Catan and The Settlers
+     * of Catan are the same box, and the engine would have cheerfully offered
+     * one to someone who owns the other. BoardGameGeek's id is the same for
+     * both, so that is what ownership is checked against here.
+     */
+    const owned = new Set(
+      all("SELECT json_extract(metadata, '$.bgg_id') bgg FROM works WHERE type = 'boardgame'")
+        .map((r) => r.bgg).filter(Boolean).map(String),
+    )
+
+    for (const c of creators.slice(0, 4)) {
+      const { role, name } = parseCreatorKey(c.key)
+      if (role !== 'Designer') continue
+      const found = await boardgame.byDesigner(name, Math.round(14 * breadth))
+      push(
+        found.filter((g) => !g.metadata?.bgg_id || !owned.has(String(g.metadata.bgg_id))),
+        'creator', c.support[0], c.key, c.display || name, 'Designer',
+      )
     }
   }
 

@@ -41,8 +41,9 @@ const commons = (fileUrl) => {
 const people = (joined, role) =>
   String(joined || '').split('|').filter(Boolean).slice(0, 2).map((name) => ({ role, name }))
 
-function query(term) {
-  const safe = String(term).toLowerCase().replace(/["\\]/g, ' ').trim()
+const esc = (v) => String(v).replace(/["\\]/g, ' ').trim()
+
+function query(filter) {
   return `
 SELECT ?game ?gameLabel ?bgg ?year ?minP ?maxP ?time ?img ?ages ?article
   (GROUP_CONCAT(DISTINCT ?designerLabel; separator='|') AS ?designers)
@@ -51,7 +52,8 @@ SELECT ?game ?gameLabel ?bgg ?year ?minP ?maxP ?time ?img ?ages ?article
 WHERE {
   ?game wdt:P31/wdt:P279* wd:Q131436 ;
         rdfs:label ?gameLabel .
-  FILTER(LANG(?gameLabel) = 'en' && CONTAINS(LCASE(?gameLabel), "${safe}"))
+  FILTER(LANG(?gameLabel) = 'en')
+  ${filter}
   OPTIONAL { ?game wdt:P2339 ?bgg }
   OPTIONAL {
     ?article schema:about ?game ;
@@ -130,10 +132,10 @@ function rank(items, term) {
     .map((x) => x.it)
 }
 
-export async function search(term, limit = 12) {
-  if (!term) return []
+/** Run any of the shaped queries and turn the rows into candidates. */
+async function run(filter, { limit, term }) {
   try {
-    const res = await fetchText(`${SPARQL}?format=json&query=${encodeURIComponent(query(term))}`, {
+    const res = await fetchText(`${SPARQL}?format=json&query=${encodeURIComponent(query(filter))}`, {
       headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json' },
       timeout: 25000,
     })
@@ -149,10 +151,144 @@ export async function search(term, limit = 12) {
       seen.add(key)
       items.push(it)
     }
-    return enrichFromWikipedia(rank(items, term).slice(0, limit))
+    const ordered = term ? rank(items, term) : items
+    return enrichFromWikipedia(ordered.slice(0, limit))
   } catch {
     return []
   }
+}
+
+export async function search(term, limit = 12) {
+  if (!term) return []
+  return run(`FILTER(CONTAINS(LCASE(?gameLabel), "${esc(String(term).toLowerCase())}"))`, { limit, term })
+}
+
+/**
+ * Everything else by someone whose game you rated highly.
+ *
+ * The strongest thing anyone can say about a board game is who designed it:
+ * a Knizia and a Feld feel nothing like each other, and people who like one
+ * tend to like the rest of theirs. Publishers are deliberately not matched —
+ * sharing a publisher says almost nothing about how a game plays.
+ */
+export async function byDesigner(name, limit = 12) {
+  if (!name) return []
+  const want = esc(String(name).toLowerCase())
+  /*
+   * Against DBpedia, not Wikidata: the designer is the whole reason this
+   * lookup exists and Wikidata mostly does not record one — P287 is empty for
+   * Catan, which is Klaus Teuber's most famous game. The infobox has it.
+   */
+  const q = `
+SELECT DISTINCT ?game (SAMPLE(?lab) AS ?label)
+       (GROUP_CONCAT(DISTINCT ?des; separator='|') AS ?designers)
+       (SAMPLE(?pt) AS ?time) (SAMPLE(?th) AS ?thumb) (SAMPLE(?ab) AS ?abstract)
+WHERE {
+  ?game dbp:designer ?d ; rdfs:label ?lab .
+  FILTER(LANG(?lab) = 'en')
+  FILTER(CONTAINS(LCASE(STR(?d)), "${want.replace(/ /g, '_')}") || CONTAINS(LCASE(STR(?d)), "${want}"))
+  BIND(REPLACE(REPLACE(STR(?d), '^.*/', ''), '_', ' ') AS ?des)
+  OPTIONAL { ?game dbp:playingTime ?pt }
+  OPTIONAL { ?game dbo:thumbnail ?th }
+  OPTIONAL { ?game dbo:abstract ?ab FILTER(LANG(?ab) = 'en') }
+}
+GROUP BY ?game
+LIMIT ${Math.max(limit, 20)}`
+
+  try {
+    const res = await fetchText(
+      `${DBPEDIA}?format=application%2Fsparql-results%2Bjson&query=${encodeURIComponent(q)}`,
+      { headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json' }, timeout: 25000 },
+    )
+    if (res.status !== 200) return []
+    const rows = JSON.parse(res.text)?.results?.bindings || []
+
+    const items = rows.map((b) => {
+      const article = decodeURIComponent(String(b.game?.value || '').split('/').pop() || '')
+      const title = String(b.label?.value || '').replace(/\s*\((?:board|card|video)\s*game\)\s*$/i, '').trim()
+      if (!title) return null
+      const seconds = Math.abs(Number(b.time?.value))
+      return {
+        provider: 'dbpedia',
+        type: 'boardgame',
+        title,
+        year: null,
+        creators: clean(b.designers?.value).slice(0, 2).map((n) => ({ role: 'Designer', name: n })),
+        genres: [],
+        overview: b.abstract?.value || null,
+        poster_url: b.thumb?.value || null,
+        runtime: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 60) : null,
+        metadata: {
+          bgg_id: null,
+          bgg_url: null,
+          wikipedia: article ? `https://en.wikipedia.org/wiki/${article}` : null,
+        },
+      }
+    }).filter(Boolean)
+
+    return withBggIds(items.slice(0, limit))
+  } catch {
+    return []
+  }
+}
+
+/*
+ * The BoardGameGeek id for a set of articles, in one query.
+ *
+ * DBpedia has the designers and Wikidata has the ids, and a game is no use
+ * here without a way through to BGG — so whichever source found the game, the
+ * other is asked for the missing half.
+ */
+async function withBggIds(items) {
+  const articles = items
+    .map((it) => decodeURIComponent(String(it.metadata.wikipedia || '').split('/wiki/').pop() || ''))
+    .filter(Boolean)
+  if (!articles.length) return items
+
+  const values = articles
+    .map((a) => `<https://en.wikipedia.org/wiki/${encodeURI(a)}>`)
+    .join(' ')
+  const q = `
+SELECT ?article ?bgg WHERE {
+  VALUES ?article { ${values} }
+  ?article schema:about ?game .
+  ?game wdt:P2339 ?bgg .
+}`
+  try {
+    const res = await fetchText(`${SPARQL}?format=json&query=${encodeURIComponent(q)}`, {
+      headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json' },
+      timeout: 20000,
+    })
+    if (res.status !== 200) return items
+    const byArticle = new Map()
+    for (const b of JSON.parse(res.text)?.results?.bindings || []) {
+      byArticle.set(decodeURIComponent(String(b.article.value).split('/wiki/').pop() || ''), b.bgg.value)
+    }
+    return items.map((it) => {
+      const key = decodeURIComponent(String(it.metadata.wikipedia || '').split('/wiki/').pop() || '')
+      const bgg = byArticle.get(key)
+      return bgg
+        ? { ...it, metadata: { ...it.metadata, bgg_id: bgg, bgg_url: `https://boardgamegeek.com/boardgame/${bgg}` } }
+        : it
+    })
+  } catch {
+    return items
+  }
+}
+
+/** Games filed under a genre you return to — the weaker of the two signals. */
+export async function byGenre(genre, limit = 12) {
+  if (!genre) return []
+  /*
+   * Either kind of statement. Wikidata files "German-style board game" as a
+   * class these games are instances of, not as a genre they have — so asking
+   * only about genre found nothing at all, including for the games the genre
+   * had just been read off.
+   */
+  return run(`
+  { ?game wdt:P136 ?g } UNION { ?game wdt:P31 ?g }
+  ?g rdfs:label ?gLabel .
+  FILTER(LANG(?gLabel) = 'en' && LCASE(?gLabel) = "${esc(String(genre).toLowerCase())}")`, { limit })
 }
 
 /*
