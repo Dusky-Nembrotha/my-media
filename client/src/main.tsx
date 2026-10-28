@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import './styles/tokens.css'
 import './styles/base.css'
 import './styles/app.css'
@@ -81,7 +81,6 @@ function Root() {
             ))}
             <Route path="/find" element={<FindPage />} />
             {/* Audiobooks folded into books; old links and bookmarks still work. */}
-            <Route path="/audiobooks" element={<Navigate to="/books" replace />} />
             <Route path="/work/:id" element={<WorkPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/stats" element={<StatsPage />} />

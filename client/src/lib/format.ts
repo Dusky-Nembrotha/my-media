@@ -17,7 +17,7 @@ export const SECTION_META: Record<MediaType, SectionInfoMeta> = {
   film: { label: 'Films', singular: 'Film', verb: 'Watched', action: 'Watch', done: 'Watched', planned: 'To watch', hue: 'var(--hue-film)', aspect: '2 / 3', icon: 'film', path: '/films' },
   tv: { label: 'TV', singular: 'Show', verb: 'Watched', action: 'Watch', done: 'Watched', planned: 'To watch', hue: 'var(--hue-tv)', aspect: '2 / 3', icon: 'tv', path: '/tv' },
   book: { label: 'Books', singular: 'Book', verb: 'Read', action: 'Read', done: 'Read', planned: 'To read', hue: 'var(--hue-book)', aspect: '2 / 3', icon: 'book', path: '/books' },
-  audiobook: { label: 'Audiobooks', singular: 'Audiobook', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-audiobook)', aspect: '1 / 1', icon: 'headphones', path: '/audiobooks' },
+  audiobook: { label: 'Audiobooks', singular: 'Audiobook', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-audiobook)', aspect: '2 / 3', icon: 'headphones', path: '/audiobooks' },
   album: { label: 'Music', singular: 'Album', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-album)', aspect: '1 / 1', icon: 'disc', path: '/music' },
   track: { label: 'Tracks', singular: 'Track', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-track)', aspect: '1 / 1', icon: 'note', path: '/tracks' },
   podcast: { label: 'Podcasts', singular: 'Podcast', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-podcast)', aspect: '1 / 1', icon: 'mic', path: '/podcasts' },
@@ -29,7 +29,12 @@ export const SECTION_META: Record<MediaType, SectionInfoMeta> = {
  * read or listened to it is recorded on the entry. The type survives in the
  * data model so old imports and links still resolve, but it is not a section.
  */
-export const TYPE_ORDER: MediaType[] = ['film', 'tv', 'book', 'album', 'podcast', 'game', 'track']
+/*
+ * Audiobooks sit next to books rather than inside them. One book is still one
+ * work — the shelves are built from how you took it in, so a title you read
+ * and also listened to appears on both.
+ */
+export const TYPE_ORDER: MediaType[] = ['film', 'tv', 'book', 'audiobook', 'album', 'podcast', 'game', 'track']
 
 export function typeOf(path: string): MediaType | null {
   const hit = TYPE_ORDER.find((t) => SECTION_META[t].path === path)

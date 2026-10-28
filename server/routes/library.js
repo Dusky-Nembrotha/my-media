@@ -36,27 +36,68 @@ const SORTS_ASC = {
   runtime: 'runtime IS NULL, runtime ASC',
 }
 
-function cardOf(row) {
+/*
+ * A card, seen from whichever shelf asked for it.
+ *
+ * The same book on the audiobook shelf is a different object: it wears the
+ * cover the recording was sold under rather than the one the hardback was,
+ * and the person who matters most about it is the one who read it aloud.
+ * Falls back to the book's own cover and author, because a recording without
+ * its own artwork is still an audiobook.
+ */
+function cardOf(row, shelf) {
   const w = hydrate(row)
+  const heard = shelf === 'audiobook'
+  const narrators = (w.metadata?.narrators || []).filter(Boolean)
+  const spoken = heard
+    ? [
+        ...narrators.slice(0, 1).map((name) => ({ role: 'Narrator', name })),
+        ...w.creators.filter((c) => c.role === 'Author').slice(0, 1),
+      ]
+    : null
+
   return {
     id: w.id,
-    type: w.type,
+    type: heard ? 'audiobook' : w.type,
     title: w.title,
     year: w.year,
     release_date: w.release_date,
-    poster_url: w.poster_url,
+    poster_url: (heard && w.metadata?.audiobook_poster_url) || w.poster_url,
     backdrop_url: w.backdrop_url,
-    creators: w.creators.filter((c) => c.role !== 'Cast').slice(0, 2),
+    creators: spoken?.length ? spoken : w.creators.filter((c) => c.role !== 'Cast').slice(0, 2),
     genres: w.genres.slice(0, 3),
     rating: row.rating ?? null,
     liked: Boolean(row.liked),
     entry_count: row.entry_count ?? 0,
     last_on: row.last_on ?? null,
     status: row.status ?? null,
-    runtime: w.runtime,
-    pages: w.pages,
+    // An audiobook is measured in hours, a book in pages.
+    runtime: heard ? (w.metadata?.audio_minutes ?? w.runtime) : w.runtime,
+    pages: heard ? null : w.pages,
+    narrators: heard ? narrators.slice(0, 2) : undefined,
     external_rating: w.external_rating,
   }
+}
+
+/*
+ * Books and audiobooks: one shelf of works, two libraries.
+ *
+ * A book is one thing whether you read it or were read it, so there is still
+ * only one work — but which library it belongs to is a question about how you
+ * took it in, and a book you did both with belongs in both. That makes
+ * membership a question about a work's entries rather than about its type.
+ *
+ * An entry with no format recorded is a book that was read: that is what every
+ * entry predating the column meant. A work with no entries at all is something
+ * you own and have not started, and it sits with the books.
+ */
+const SHELF = {
+  audiobook: `w.type = 'book' AND EXISTS (
+    SELECT 1 FROM entries e2 WHERE e2.work_id = w.id AND e2.format IN ('audiobook', 'both'))`,
+  book: `w.type = 'book' AND (
+    EXISTS (SELECT 1 FROM entries e2 WHERE e2.work_id = w.id
+              AND (e2.format IN ('book', 'both') OR e2.format IS NULL))
+    OR NOT EXISTS (SELECT 1 FROM entries e3 WHERE e3.work_id = w.id))`,
 }
 
 /** GET /api/works — the grid behind every section page. */
@@ -69,7 +110,10 @@ router.get('/works', (req, res) => {
 
   const where = []
   const params = []
-  if (type && type !== 'all') { where.push('w.type = ?'); params.push(type) }
+  if (type && type !== 'all') {
+    if (SHELF[type]) where.push(SHELF[type])
+    else { where.push('w.type = ?'); params.push(type) }
+  }
   if (q) {
     where.push('(lower(w.title) LIKE ? OR lower(w.creators) LIKE ?)')
     params.push(`%${String(q).toLowerCase()}%`, `%${String(q).toLowerCase()}%`)
@@ -107,7 +151,7 @@ router.get('/works', (req, res) => {
   )
   const total = get(`SELECT count(*) c FROM (${filtered})`, ...params, ...outerParams).c
 
-  const cards = rows.map(cardOf)
+  const cards = rows.map((r) => cardOf(r, type))
   prioritise(cards)
   res.json({ works: cards, total, limit, offset })
 })
@@ -1513,6 +1557,20 @@ router.get('/sections', (req, res) => {
       FROM works w LEFT JOIN entries e ON e.work_id = w.id
      GROUP BY w.type`)
   const byType = Object.fromEntries(counts.map((c) => [c.type, c]))
+
+  /*
+   * The two book shelves are counted by how things were taken in, not by the
+   * type column — which says 'book' for all of them — and a title read and
+   * also listened to is counted on both.
+   */
+  for (const shelf of ['book', 'audiobook']) {
+    byType[shelf] = get(`
+      SELECT count(DISTINCT w.id) works,
+             count(e.id) entries,
+             round(avg(e.rating), 2) avg_rating
+        FROM works w LEFT JOIN entries e ON e.work_id = w.id
+       WHERE ${SHELF[shelf]}`) || { works: 0, entries: 0, avg_rating: null }
+  }
   res.json(TYPES.map((type) => ({
     type,
     ...SECTIONS[type],
