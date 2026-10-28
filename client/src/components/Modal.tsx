@@ -41,6 +41,31 @@ export function Modal({ title, onClose, children, footer, wide, className }: {
   )
 }
 
+/**
+ * A request that did not come back, said so.
+ *
+ * Every page here fetches on mount and renders "Loading…" until the data
+ * arrives — which, if the request fails, is for ever. A server restart mid-use
+ * left the import page claiming it was still loading its importers with no
+ * error, no retry and nothing to do but guess at a refresh. A failure is not a
+ * slow success, and should never be shown as one.
+ */
+export function Failed({ what, error, onRetry }: {
+  what: string
+  error?: string | null
+  onRetry: () => void
+}) {
+  return (
+    <Empty
+      icon="refresh"
+      title={`Could not load ${what}`}
+      action={<button className="btn btn--primary" onClick={onRetry}>Try again</button>}
+    >
+      {error || 'The server did not answer. If it was restarting, a retry usually settles it.'}
+    </Empty>
+  )
+}
+
 export function Empty({ icon = 'sparkle', title, children, action }: {
   icon?: string
   title: string

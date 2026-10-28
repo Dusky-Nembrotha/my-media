@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../components/Icon'
-import { Empty, Modal } from '../components/Modal'
+import { Empty, Modal, Failed } from '../components/Modal'
 import { api } from '../lib/api'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, fmtNumber, relDate } from '../lib/format'
@@ -415,7 +415,9 @@ export function ImportPage() {
       ) : null}
 
       {!analysis && !result && !sources.data?.sources?.length && (
-        <Empty icon="import" title="Loading importers…" />
+        sources.loading
+          ? <Empty icon="import" title="Loading importers…" />
+          : <Failed what="the importers" error={sources.error} onRetry={sources.reload} />
       )}
     </div>
   )
