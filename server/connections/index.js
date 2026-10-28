@@ -135,11 +135,25 @@ export const METADATA = [
     ],
     settingKey: 'google_books_api_key',
   },
+  {
+    id: 'bgg', brand: '#ff5100', label: 'BoardGameGeek', mediaTypes: ['boardgame'], kind: 'metadata-key',
+    website: 'https://boardgamegeek.com',
+    blurb: 'The only serious catalogue of board games — designers, player counts, weight, '
+      + 'rankings and the artwork. Their XML API now refuses anonymous requests, so until a key '
+      + 'is issued board games run on Wikidata, which carries little beyond a title and a BGG id. '
+      + 'Every game still links straight through to its page there.',
+    instructions: [
+      'Apply at boardgamegeek.com/using_the_xml_api — access is granted per application.',
+      'Paste the key here once it arrives; board games will switch over to BGG on their own.',
+      'Until then search runs on Wikidata, whose coverage of games is thin but open.',
+    ],
+    settingKey: 'bgg_api_key',
+  },
   { id: 'openlibrary', brand: '#b7410e', label: 'Open Library', mediaTypes: ['book'], kind: 'metadata-free', website: 'https://openlibrary.org', blurb: 'Covers, authors, subjects and ratings for books. No key needed; already in use.' },
   { id: 'itunes', brand: '#fa243c', label: 'Apple', mediaTypes: ['album', 'audiobook', 'podcast'], kind: 'metadata-free', website: 'https://music.apple.com', blurb: 'Artwork and metadata for music, audiobooks and podcasts. No key needed; already in use.' },
   { id: 'musicbrainz', brand: '#ba478f', label: 'MusicBrainz', mediaTypes: ['album'], kind: 'metadata-free', website: 'https://musicbrainz.org', blurb: 'Release data and genre tags, with cover art from the Cover Art Archive. No key needed.' },
   { id: 'tvmaze', brand: '#3c948b', label: 'TVmaze', mediaTypes: ['tv'], kind: 'metadata-free', website: 'https://tvmaze.com', blurb: 'TV artwork, genres, networks and episode counts. No key needed; already in use.' },
-  { id: 'wikidata', brand: '#3366cc', label: 'Wikipedia & Wikidata', mediaTypes: ['film', 'game'], kind: 'metadata-free', website: 'https://wikidata.org', blurb: 'Poster art, directors, genres and runtimes for films and games when TMDB is not connected.' },
+  { id: 'wikidata', brand: '#3366cc', label: 'Wikipedia & Wikidata', mediaTypes: ['film', 'game'], kind: 'metadata-free', website: 'https://wikidata.org', blurb: 'Poster art, directors, genres and runtimes for films and games when TMDB is not connected, and the board game catalogue until BoardGameGeek issues a key.' },
 ]
 
 export function catalogue() {

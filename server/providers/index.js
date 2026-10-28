@@ -9,9 +9,10 @@ import * as wikidata from './wikidata.js'
 import * as omdb from './omdb.js'
 import * as gbooks from './googlebooks.js'
 import * as imdbdata from './imdbdata.js'
+import * as boardgame from './boardgame.js'
 import { normaliseTitle, uniqueBy } from '../lib/util.js'
 
-export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks, imdbdata }
+export { tmdb, itunes, ol, mb, tvmaze, wiki, wikidata, omdb, gbooks, imdbdata, boardgame }
 
 const fp = (c) => `${c.type}|${normaliseTitle(c.title)}|${c.year || ''}`
 
@@ -56,6 +57,7 @@ export function providersFor(type) {
     case 'track': return ['itunes']
     case 'podcast': return ['itunes']
     case 'game': return ['wikipedia']
+    case 'boardgame': return ['wikidata', 'wikipedia']
     default: return []
   }
 }
@@ -172,6 +174,9 @@ export async function searchProviders(type, term, limit = 12, { field } = {}) {
       break
     case 'podcast':
       jobs.push(itunes.search('podcast', term, limit, { field }))
+      break
+    case 'boardgame':
+      jobs.push(boardgame.search(term, limit))
       break
     case 'game':
       jobs.push(wiki.search('game', term, limit))

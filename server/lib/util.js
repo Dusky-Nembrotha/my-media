@@ -1,4 +1,4 @@
-export const TYPES = ['film', 'tv', 'book', 'audiobook', 'album', 'track', 'podcast', 'game']
+export const TYPES = ['film', 'tv', 'book', 'audiobook', 'album', 'track', 'podcast', 'game', 'boardgame']
 
 export const SECTIONS = {
   film: { label: 'Films', singular: 'Film', verb: 'watched' },
@@ -9,6 +9,7 @@ export const SECTIONS = {
   track: { label: 'Tracks', singular: 'Track', verb: 'listened to' },
   podcast: { label: 'Podcasts', singular: 'Podcast', verb: 'listened to' },
   game: { label: 'Games', singular: 'Game', verb: 'played' },
+  boardgame: { label: 'Board games', singular: 'Board game', verb: 'played' },
 }
 
 const ARTICLES = /^(the|a|an|le|la|les|el|los|das|der|die)\s+/i

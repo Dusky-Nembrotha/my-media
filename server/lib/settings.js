@@ -4,6 +4,9 @@ const DEFAULTS = {
   tmdb_api_key: '',
   omdb_api_key: '',
   google_books_api_key: '',
+  // BoardGameGeek closed their XML API to anonymous requests; board games run
+  // on Wikidata until a key is issued, then on BGG itself.
+  bgg_api_key: '',
   anthropic_api_key: '',
   theme: 'dark',
   accent: 'amber',
@@ -46,10 +49,12 @@ export function publicSettings() {
     tmdb_api_key: s.tmdb_api_key ? '••••••••' + s.tmdb_api_key.slice(-4) : '',
     omdb_api_key: s.omdb_api_key ? '••••••••' + s.omdb_api_key.slice(-4) : '',
     google_books_api_key: s.google_books_api_key ? '••••••••' + s.google_books_api_key.slice(-4) : '',
+    bgg_api_key: s.bgg_api_key ? '••••••••' + s.bgg_api_key.slice(-4) : '',
     anthropic_api_key: s.anthropic_api_key ? '••••••••' + s.anthropic_api_key.slice(-4) : '',
     has_tmdb: Boolean(s.tmdb_api_key),
     has_omdb: Boolean(s.omdb_api_key),
     has_google_books: Boolean(s.google_books_api_key),
+    has_bgg: Boolean(s.bgg_api_key),
     has_anthropic: Boolean(s.anthropic_api_key),
   }
 }

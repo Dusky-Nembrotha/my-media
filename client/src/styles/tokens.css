@@ -49,6 +49,9 @@
   --hue-track: #5fb37a;
   --hue-podcast: #e08a4a;
   --hue-game: #8f93f0;
+  /* The one clear gap left in the set: everything else sits in amber, pink,
+     purple, blue or green, and a sixth of those would be a near-miss. */
+  --hue-boardgame: #a3c644;
 
   /* validated chart palette (dark steps, re-checked against surface #120e1b) */
   --viz-primary: #3987e5;

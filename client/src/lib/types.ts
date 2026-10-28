@@ -1,4 +1,4 @@
-export type MediaType = 'film' | 'tv' | 'book' | 'audiobook' | 'album' | 'track' | 'podcast' | 'game'
+export type MediaType = 'film' | 'tv' | 'book' | 'audiobook' | 'album' | 'track' | 'podcast' | 'game' | 'boardgame'
 
 export interface Creator { role?: string; name: string }
 

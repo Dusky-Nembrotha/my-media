@@ -22,6 +22,8 @@ export const SECTION_META: Record<MediaType, SectionInfoMeta> = {
   track: { label: 'Tracks', singular: 'Track', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-track)', aspect: '1 / 1', icon: 'note', path: '/tracks' },
   podcast: { label: 'Podcasts', singular: 'Podcast', verb: 'Listened to', action: 'Listen to', done: 'Heard', planned: 'To listen to', hue: 'var(--hue-podcast)', aspect: '1 / 1', icon: 'mic', path: '/podcasts' },
   game: { label: 'Games', singular: 'Game', verb: 'Played', action: 'Play', done: 'Played', planned: 'To play', hue: 'var(--hue-game)', aspect: '2 / 3', icon: 'gamepad', path: '/games' },
+  // Board game boxes are photographed square far more often than not.
+  boardgame: { label: 'Board games', singular: 'Board game', verb: 'Played', action: 'Play', done: 'Played', planned: 'To play', hue: 'var(--hue-boardgame)', aspect: '1 / 1', icon: 'dice', path: '/boardgames' },
 }
 
 /*
@@ -34,7 +36,7 @@ export const SECTION_META: Record<MediaType, SectionInfoMeta> = {
  * work — the shelves are built from how you took it in, so a title you read
  * and also listened to appears on both.
  */
-export const TYPE_ORDER: MediaType[] = ['film', 'tv', 'book', 'audiobook', 'album', 'podcast', 'game', 'track']
+export const TYPE_ORDER: MediaType[] = ['film', 'tv', 'book', 'audiobook', 'album', 'podcast', 'game', 'boardgame', 'track']
 
 export function typeOf(path: string): MediaType | null {
   const hit = TYPE_ORDER.find((t) => SECTION_META[t].path === path)

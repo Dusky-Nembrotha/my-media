@@ -469,6 +469,9 @@ function buildLinks(work: Work) {
   if (work.metadata?.goodreads_url) out.push({ label: 'Goodreads', href: work.metadata.goodreads_url })
   if (work.metadata?.audible_url) out.push({ label: 'Audible', href: work.metadata.audible_url })
   if (work.metadata?.itunes_url) out.push({ label: 'Apple', href: work.metadata.itunes_url })
+  // Board games live on BoardGameGeek whatever we hold locally, so that link
+  // goes first for them.
+  if (work.metadata?.bgg_url) out.unshift({ label: 'BoardGameGeek', href: work.metadata.bgg_url })
   if (work.metadata?.wikipedia) out.push({ label: 'Wikipedia', href: work.metadata.wikipedia })
   // Not Open Library: the ratings strip above already links there, and two
   // buttons to the same page is just clutter.
