@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
-import { searchProviders, searchAllTypes, bookNoise, enrich, screenRatings, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks, imdbdata, steam } from '../providers/index.js'
+import { searchProviders, searchAllTypes, bookNoise, enrich, screenRatings, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks, imdbdata, steam, boardgame } from '../providers/index.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -280,6 +280,12 @@ async function coverCandidates({ type, title, creator, tmdbId, mbid }) {
   }
   if (type === 'album' && mbid) {
     jobs.push(Promise.resolve([{ url: mb.coverUrl(mbid, 1200), source: 'Cover Art Archive' }]))
+  }
+  if (type === 'boardgame') {
+    // The box, from the infobox — the same place the shelf gets it, so a
+    // game with a bad cover can at least be offered the right one.
+    jobs.push(boardgame.search(title, 6)
+      .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Wikipedia', label: h.title }))))
   }
   jobs.push(wiki.search(type, title, 4)
     .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Wikipedia', label: h.title }))))

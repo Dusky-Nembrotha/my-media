@@ -15,6 +15,7 @@ const QUALIFIER = {
   tv: 'television series',
   book: 'novel book',
   game: 'video game',
+  boardgame: 'board game',
   album: 'album',
   audiobook: 'book',
 }

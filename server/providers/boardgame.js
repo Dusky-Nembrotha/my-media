@@ -16,6 +16,7 @@
  * see bggKey() below, which is the only switch that needs flipping.
  */
 import { fetchText } from '../lib/fetchv4.js'
+import { fetchJson } from '../lib/http.js'
 import { normaliseTitle, parseYear } from '../lib/util.js'
 import { setting } from '../lib/settings.js'
 
@@ -226,7 +227,12 @@ LIMIT ${Math.max(limit, 20)}`
       }
     }).filter(Boolean)
 
-    return withBggIds(items.slice(0, limit))
+    const picked = items.slice(0, limit)
+    const art = await boxArt(picked.map((it) => articleOf(it.metadata.wikipedia)).filter(Boolean))
+    return withBggIds(picked.map((it) => ({
+      ...it,
+      poster_url: art.get(articleOf(it.metadata.wikipedia)) || it.poster_url || null,
+    })))
   } catch {
     return []
   }
@@ -327,6 +333,40 @@ WHERE {
 GROUP BY ?game`
 }
 
+/*
+ * The box, from the article's own infobox.
+ *
+ * Neither of the obvious sources gives you a board game's cover. Wikidata's
+ * P18 is a photograph of the game being played — Pandemic was a snapshot of
+ * a convention hall in Essen in 2008, Ticket to Ride somebody's table — and
+ * DBpedia's thumbnail points at Commons, where box art cannot live: it is
+ * non-free, so it is uploaded to Wikipedia itself under fair use and the
+ * Commons address 404s.
+ *
+ * MediaWiki's own pageimages knows where the file really is, takes fifty
+ * titles at a time, and pilicense=any is what admits the fair-use uploads.
+ */
+async function boxArt(articles) {
+  const titles = [...new Set(articles)].slice(0, 50)
+  if (!titles.length) return new Map()
+  try {
+    const j = await fetchJson(
+      'https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages'
+      + `&piprop=thumbnail&pithumbsize=600&pilicense=any&titles=${encodeURIComponent(titles.join('|'))}`,
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    const out = new Map()
+    for (const page of Object.values(j?.query?.pages || {})) {
+      if (page?.title && page?.thumbnail?.source) out.set(page.title, page.thumbnail.source)
+    }
+    return out
+  } catch {
+    return new Map()
+  }
+}
+
+const articleOf = (url) => decodeURIComponent(String(url || '').split('/wiki/').pop() || '').replace(/_/g, ' ')
+
 /** A DBpedia value that is a bare word rather than a sentence fragment. */
 const clean = (v) => {
   const out = String(v || '').split('|').map((x) => x.trim()).filter(Boolean)
@@ -360,6 +400,8 @@ async function enrichFromWikipedia(items) {
     if (key) byArticle.set(key, b)
   }
 
+  const art = await boxArt(items.map((it) => articleOf(it.metadata.wikipedia)).filter(Boolean))
+
   return items.map((it) => {
     const key = decodeURIComponent(String(it.metadata.wikipedia || '').split('/wiki/').pop() || '')
     const b = byArticle.get(key)
@@ -391,7 +433,8 @@ async function enrichFromWikipedia(items) {
       creators: merged.slice(0, 3),
       genres: it.genres.length ? it.genres : clean(b.genres?.value).slice(0, 3),
       overview: b.abstract?.value || null,
-      poster_url: it.poster_url || b.thumb?.value || null,
+      // The infobox first: Wikidata's picture is usually of a table, not a box.
+      poster_url: art.get(articleOf(it.metadata.wikipedia)) || it.poster_url || null,
       runtime: it.runtime || minutes,
     }
   })
