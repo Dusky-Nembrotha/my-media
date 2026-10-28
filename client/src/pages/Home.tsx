@@ -3,19 +3,43 @@ import { Icon } from '../components/Icon'
 import { artworkUrl } from '../lib/img'
 import { Row } from '../components/Row'
 import { PosterCard, PosterSkeleton } from '../components/Poster'
-import { Empty } from '../components/Modal'
+import { Empty, Failed } from '../components/Modal'
 import { useApp, useFetch } from '../lib/store'
 import { SECTION_META, TYPE_ORDER, creatorLine, fmtDate, relDate, fmtNumber } from '../lib/format'
 import type { ActivityItem, Rec, WorkCard, MediaType } from '../lib/types'
 
 export function HomePage() {
-  const { counts, sections, openLog } = useApp()
+  const { counts, sections, openLog, ready, bootError, refresh } = useApp()
 
   const recent = useFetch<{ works: WorkCard[] }>('/works?sort=recent&status=logged&limit=18')
   const inProgress = useFetch<{ works: WorkCard[] }>('/works?status=in_progress&limit=12')
   const activity = useFetch<{ activity: ActivityItem[] }>('/activity?limit=8')
   const inbox = useFetch<{ recs: Rec[] }>('/recs?status=open')
   const topRated = useFetch<{ works: WorkCard[] }>('/works?sort=rating&minRating=4.5&limit=18')
+
+  /*
+   * Counts are zero until the first load answers, so an unread library and an
+   * empty one are the same thing from here. Showing the welcome before anyone
+   * has looked meant flashing "nothing logged yet" at a thousand entries on
+   * every single visit. Wait to be told.
+   */
+  if (!ready) {
+    return (
+      <div className="page">
+        <div className="grid" style={{ marginTop: 28 }}>
+          {Array.from({ length: 12 }, (_, i) => <PosterSkeleton key={i} />)}
+        </div>
+      </div>
+    )
+  }
+
+  if (bootError && counts.works === 0) {
+    return (
+      <div className="page">
+        <Failed what="your library" error={bootError} onRetry={() => { void refresh() }} />
+      </div>
+    )
+  }
 
   const isEmpty = counts.works === 0
 

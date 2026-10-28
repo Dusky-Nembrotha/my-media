@@ -22,6 +22,17 @@ interface Ctx {
   enrich: EnrichState | null
   sections: SectionInfo[]
   counts: { works: number; entries: number; recsOpen: number; lists: number }
+  /*
+   * Whether the first load has come back yet, either way.
+   *
+   * Counts start at zero because they have to start at something, and an
+   * empty library and an unread one look identical from there — which is why
+   * the app flashed its "nothing logged yet" welcome at someone with a
+   * thousand entries every time they opened it. Nobody should read counts
+   * without knowing whether they mean anything.
+   */
+  ready: boolean
+  bootError: string | null
   settings: Record<string, any>
   refresh: () => Promise<void>
   toast: (message: string, tone?: Toast['tone']) => void
@@ -42,6 +53,8 @@ const AppCtx = createContext<Ctx | null>(null)
 export function AppProvider({ children }: { children: ReactNode }) {
   const [sections, setSections] = useState<SectionInfo[]>([])
   const [counts, setCounts] = useState({ works: 0, entries: 0, recsOpen: 0, lists: 0 })
+  const [ready, setReady] = useState(false)
+  const [bootError, setBootError] = useState<string | null>(null)
   const [settings, setSettings] = useState<Record<string, any>>({})
   const [toasts, setToasts] = useState<Toast[]>([])
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null)
@@ -69,10 +82,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCounts(boot.counts)
       setSettings(boot.settings)
       setSections(secs)
+      setBootError(null)
       setVersion((v) => v + 1)
     } catch (err) {
-      // The app still works offline-ish; the toast tells the user why it is bare.
+      setBootError((err as Error).message)
       console.error(err)
+    } finally {
+      // Attempted, which is the thing anyone reading counts needs to know.
+      setReady(true)
     }
   }, [])
 
@@ -114,6 +131,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     enrich,
     sections,
     counts,
+    ready,
+    bootError,
     settings,
     refresh,
     toast,
@@ -127,7 +146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     theme,
     setTheme,
     version,
-  }), [enrich, sections, counts, settings, refresh, toast, toasts, logTarget, paletteOpen, theme, setTheme, version])
+  }), [enrich, sections, counts, ready, bootError, settings, refresh, toast, toasts, logTarget, paletteOpen, theme, setTheme, version])
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>
 }

@@ -8,7 +8,7 @@ import { useCloseOnBack } from '../lib/useCloseOnBack'
 import { SECTION_META, TYPE_ORDER } from '../lib/format'
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { sections, counts, toasts, dismissToast, setPaletteOpen, openLog, enrich } = useApp()
+  const { sections, counts, ready, toasts, dismissToast, setPaletteOpen, openLog, enrich } = useApp()
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
 
@@ -34,7 +34,8 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="rail__mark"><Logo size={22} /></span>
             <span className="u-col u-grow" style={{ minWidth: 0 }}>
               <span className="rail__name">Shelved</span>
-              <span className="rail__sub">{counts.entries.toLocaleString('en-GB')} things logged</span>
+              {/* Blank rather than "0 things logged" before the first load answers. */}
+              <span className="rail__sub">{ready ? `${counts.entries.toLocaleString('en-GB')} things logged` : '\u00a0'}</span>
             </span>
           </Link>
           <NavLink
