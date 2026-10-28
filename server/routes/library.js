@@ -286,9 +286,40 @@ async function coverCandidates({ type, title, creator, tmdbId, mbid }) {
     // game with a bad cover can at least be offered the right one.
     jobs.push(boardgame.search(title, 6)
       .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Wikipedia', label: h.title }))))
+    // And every picture the game's own article uses. Searching Commons by
+    // name offered a conference centre as a cover for Wingspan; what an
+    // article illustrates itself with is about the thing it is about.
+    jobs.push(boardgame.articleFor(title)
+      .then((article) => boardgame.articlePictures(article, 12))
+      .then((hits) => hits.map((h) => ({ url: h.url, source: 'Wikipedia', label: h.label }))))
   }
   jobs.push(wiki.search(type, title, 4)
     .then((hits) => hits.filter((h) => h.poster_url).map((h) => ({ url: h.poster_url, source: 'Wikipedia', label: h.title }))))
+
+  /*
+   * One file, one choice.
+   *
+   * The same picture reaches here under several addresses — a thumbnail and
+   * the original, or two thumbnails at different widths — and the chooser was
+   * offering it twice as though they were alternatives. Wikimedia's filename
+   * is the same in every one of them once the size prefix is off.
+   */
+  const fileKey = (url) => {
+    const last = decodeURIComponent(String(url).split('?')[0].split('/').pop() || '')
+    return last.replace(/^\d+px-/, '').toLowerCase()
+  }
+
+  /*
+   * And it has to be the right game. Searching Wikipedia for "Codenames board
+   * game" also turns up an article about Monopoly, which was then offered as
+   * a cover for Codenames. A candidate has to name the thing it claims to be.
+   */
+  const words = String(title).toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 3)
+  const relevant = (c) => {
+    if (type !== 'boardgame' || !words.length) return true
+    const haystack = `${c.label || ''} ${fileKey(c.url)}`.toLowerCase()
+    return words.some((w) => haystack.includes(w))
+  }
 
   const settled = await Promise.allSettled(jobs)
   const seen = new Set()
@@ -296,8 +327,10 @@ async function coverCandidates({ type, title, creator, tmdbId, mbid }) {
   for (const r of settled) {
     if (r.status !== 'fulfilled') continue
     for (const c of r.value || []) {
-      if (!c?.url || seen.has(c.url)) continue
-      seen.add(c.url)
+      if (!c?.url) continue
+      const key = fileKey(c.url)
+      if (seen.has(key) || !relevant(c)) continue
+      seen.add(key)
       candidates.push(c)
     }
   }

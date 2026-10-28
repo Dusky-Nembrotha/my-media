@@ -439,3 +439,89 @@ async function enrichFromWikipedia(items) {
     }
   })
 }
+
+/*
+ * Every picture the game's own article uses.
+ *
+ * Box art is copyrighted, so it is never on Commons — it reaches Wikipedia
+ * only when an article uses it under fair use, and plenty of articles lead
+ * with a photograph of a game in progress instead. Codenames is one: there is
+ * no free picture of that box anywhere and no amount of searching conjures
+ * one.
+ *
+ * Searching Commons by name was worse than useless — "Wingspan" returned a
+ * conference centre in Washington County and "Codenames" a wartime planning
+ * document. The images an article actually uses are about the thing the
+ * article is about, which is the only test that holds.
+ */
+const CHROME = /^(Commons-logo|Wiki_letter|Edit-clear|Question_book|Ambox|Symbol|Folder_Hexagonal|Portal-puzzle|Disambig|Crystal_Clear|Nuvola|Text_document)/i
+
+export async function articlePictures(article, limit = 12) {
+  if (!article) return []
+  try {
+    const listed = await fetchJson(
+      'https://en.wikipedia.org/w/api.php?action=query&format=json&prop=images&imlimit=40'
+      + `&titles=${encodeURIComponent(article)}`,
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    const names = Object.values(listed?.query?.pages || {})
+      .flatMap((p) => p?.images || [])
+      .map((i) => String(i.title || ''))
+      .filter((t) => /\.(jpe?g|png|webp)$/i.test(t))
+      .filter((t) => !CHROME.test(t.replace(/^File:/, '')))
+      .slice(0, limit)
+    if (!names.length) return []
+
+    const info = await fetchJson(
+      'https://en.wikipedia.org/w/api.php?action=query&format=json&prop=imageinfo'
+      + `&iiprop=url|size&iiurlwidth=600&titles=${encodeURIComponent(names.join('|'))}`,
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    return Object.values(info?.query?.pages || {})
+      .map((p) => {
+        const ii = p?.imageinfo?.[0]
+        return ii?.thumburl || ii?.url
+          ? {
+              url: ii.thumburl || ii.url,
+              width: ii.thumbwidth ?? ii.width ?? null,
+              label: String(p.title || '').replace(/^File:/, '').replace(/\.[a-z]+$/i, '').replace(/_/g, ' '),
+            }
+          : null
+      })
+      .filter(Boolean)
+      // A 60-pixel flag icon is not a cover.
+      .filter((c) => (c.width ?? 600) >= 200)
+  } catch {
+    return []
+  }
+}
+
+/** The article a game's page lives at, for everything above. */
+export async function articleFor(title) {
+  const hits = await search(title, 3)
+  const exact = hits.find((h) => normaliseTitle(h.title) === normaliseTitle(title)) || hits[0]
+  const url = exact?.metadata?.wikipedia
+  if (url) return decodeURIComponent(String(url).split('/wiki/').pop() || '').replace(/_/g, ' ')
+
+  /*
+   * Wikidata does not always link the article even when there is one — it has
+   * no sitelink for Carcassonne, which has had an article for twenty years.
+   * Ask Wikipedia directly, qualified, so "Carcassonne" finds the game rather
+   * than the walled city in Aude.
+   */
+  try {
+    const j = await fetchJson(
+      'https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srlimit=3'
+      + `&srsearch=${encodeURIComponent(`${title} board game`)}`,
+      { ttlSeconds: 60 * 60 * 24 * 7 },
+    )
+    const words = String(title).toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 2)
+    const hit = (j?.query?.search || []).find((r) => {
+      const t = String(r.title || '').toLowerCase()
+      return words.every((w) => t.includes(w))
+    })
+    return hit?.title || null
+  } catch {
+    return null
+  }
+}
