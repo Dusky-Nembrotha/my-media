@@ -20,6 +20,7 @@ import { normaliseTitle, parseYear } from '../lib/util.js'
 import { setting } from '../lib/settings.js'
 
 const SPARQL = 'https://query.wikidata.org/sparql'
+const DBPEDIA = 'https://dbpedia.org/sparql'
 const UA = 'Shelved/0.1 (https://github.com/Dusky-Nembrotha/shelved; self-hosted personal media log)'
 
 /** Set once BoardGameGeek issues one; until then everything runs on Wikidata. */
@@ -43,7 +44,7 @@ const people = (joined, role) =>
 function query(term) {
   const safe = String(term).toLowerCase().replace(/["\\]/g, ' ').trim()
   return `
-SELECT ?game ?gameLabel ?bgg ?year ?minP ?maxP ?time ?img ?ages
+SELECT ?game ?gameLabel ?bgg ?year ?minP ?maxP ?time ?img ?ages ?article
   (GROUP_CONCAT(DISTINCT ?designerLabel; separator='|') AS ?designers)
   (GROUP_CONCAT(DISTINCT ?publisherLabel; separator='|') AS ?publishers)
   (GROUP_CONCAT(DISTINCT ?genreLabel; separator='|') AS ?genres)
@@ -52,6 +53,10 @@ WHERE {
         rdfs:label ?gameLabel .
   FILTER(LANG(?gameLabel) = 'en' && CONTAINS(LCASE(?gameLabel), "${safe}"))
   OPTIONAL { ?game wdt:P2339 ?bgg }
+  OPTIONAL {
+    ?article schema:about ?game ;
+             schema:isPartOf <https://en.wikipedia.org/> .
+  }
   OPTIONAL { ?game wdt:P571 ?inception . BIND(YEAR(?inception) AS ?year) }
   OPTIONAL { ?game wdt:P1872 ?minP }
   OPTIONAL { ?game wdt:P1873 ?maxP }
@@ -62,7 +67,7 @@ WHERE {
   OPTIONAL { ?game wdt:P123 ?publisher . ?publisher rdfs:label ?publisherLabel . FILTER(LANG(?publisherLabel)='en') }
   OPTIONAL { ?game wdt:P136 ?genre . ?genre rdfs:label ?genreLabel . FILTER(LANG(?genreLabel)='en') }
 }
-GROUP BY ?game ?gameLabel ?bgg ?year ?minP ?maxP ?time ?img ?ages
+GROUP BY ?game ?gameLabel ?bgg ?year ?minP ?maxP ?time ?img ?ages ?article
 LIMIT 40`
 }
 
@@ -90,6 +95,7 @@ function normalise(b) {
       // The point of the whole exercise: a way through to the real thing.
       bgg_url: bgg ? `https://boardgamegeek.com/boardgame/${bgg}` : null,
       wikidata_id: String(b.game?.value || '').split('/').pop() || null,
+      wikipedia: b.article?.value || null,
       min_players: players.length ? Math.min(...players) : null,
       max_players: players.length ? Math.max(...players) : null,
       min_age: b.ages?.value ? Number(b.ages.value) : null,
@@ -143,8 +149,114 @@ export async function search(term, limit = 12) {
       seen.add(key)
       items.push(it)
     }
-    return rank(items, term).slice(0, limit)
+    return enrichFromWikipedia(rank(items, term).slice(0, limit))
   } catch {
     return []
   }
+}
+
+/*
+ * What Wikipedia's infobox knows, which is a great deal more than Wikidata.
+ *
+ * Wikidata holds the BoardGameGeek id and almost nothing else — no designer
+ * for Carcassonne, no year for Pandemic. DBpedia extracts the same articles'
+ * infoboxes, where all of that is filled in, and it takes a list of subjects
+ * in one query, so enriching a whole page of results costs one request rather
+ * than one each.
+ */
+function dbpediaQuery(articles) {
+  const values = articles
+    .map((a) => `<http://dbpedia.org/resource/${a.replace(/ /g, '_')}>`)
+    .join(' ')
+  return `
+SELECT ?game (GROUP_CONCAT(DISTINCT ?des; separator='|') AS ?designers)
+       (GROUP_CONCAT(DISTINCT ?pub; separator='|') AS ?publishers)
+       (GROUP_CONCAT(DISTINCT ?gen; separator='|') AS ?genres)
+       (SAMPLE(?pt) AS ?time) (SAMPLE(?y1) AS ?years) (SAMPLE(?y2) AS ?dated)
+       (SAMPLE(?th) AS ?thumb)
+       (SAMPLE(?ab) AS ?abstract)
+WHERE {
+  VALUES ?game { ${values} }
+  OPTIONAL { ?game dbp:designer ?d  BIND(REPLACE(REPLACE(STR(?d),  '^.*/',''), '_', ' ') AS ?des) }
+  OPTIONAL { ?game dbp:publisher ?p BIND(REPLACE(REPLACE(STR(?p),  '^.*/',''), '_', ' ') AS ?pub) }
+  OPTIONAL { ?game dbp:genre ?g     BIND(REPLACE(REPLACE(STR(?g),  '^.*/',''), '_', ' ') AS ?gen) }
+  OPTIONAL { ?game dbp:playingTime ?pt }
+  # Separate variables: binding one name across several OPTIONALs turns the
+  # later ones into a filter on the first, which is why every year was blank.
+  OPTIONAL { ?game dbp:years ?y1 }
+  OPTIONAL { ?game dbp:date ?y2 }
+  OPTIONAL { ?game dbo:thumbnail ?th }
+  OPTIONAL { ?game dbo:abstract ?ab FILTER(LANG(?ab) = 'en') }
+}
+GROUP BY ?game`
+}
+
+/** A DBpedia value that is a bare word rather than a sentence fragment. */
+const clean = (v) => {
+  const out = String(v || '').split('|').map((x) => x.trim()).filter(Boolean)
+    .filter((x) => x.length > 1 && x.length < 48 && !/^\d+$/.test(x))
+  return [...new Set(out)]
+}
+
+async function enrichFromWikipedia(items) {
+  const articles = items
+    .map((it) => it.metadata.wikipedia)
+    .filter(Boolean)
+    .map((url) => decodeURIComponent(String(url).split('/wiki/').pop() || ''))
+    .filter(Boolean)
+  if (!articles.length) return items
+
+  let rows = []
+  try {
+    const res = await fetchText(
+      `${DBPEDIA}?format=application%2Fsparql-results%2Bjson&query=${encodeURIComponent(dbpediaQuery(articles.slice(0, 20)))}`,
+      { headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json' }, timeout: 25000 },
+    )
+    if (res.status !== 200) return items
+    rows = JSON.parse(res.text)?.results?.bindings || []
+  } catch {
+    return items
+  }
+
+  const byArticle = new Map()
+  for (const b of rows) {
+    const key = decodeURIComponent(String(b.game?.value || '').split('/').pop() || '')
+    if (key) byArticle.set(key, b)
+  }
+
+  return items.map((it) => {
+    const key = decodeURIComponent(String(it.metadata.wikipedia || '').split('/wiki/').pop() || '')
+    const b = byArticle.get(key)
+    if (!b) return it
+
+    const designers = clean(b.designers?.value).slice(0, 2).map((name) => ({ role: 'Designer', name }))
+    const publishers = clean(b.publishers?.value).slice(0, 1).map((name) => ({ role: 'Publisher', name }))
+    // Infobox playing time arrives in seconds, and sometimes negative.
+    const seconds = Math.abs(Number(b.time?.value))
+    const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 60) : null
+
+    /*
+     * Merged, not substituted. Wikidata tends to know a publisher and nothing
+     * else, which is enough to look like an answer and so suppress the real
+     * one — Wingspan was being credited to a Russian publisher rather than to
+     * Elizabeth Hargrave. Whoever designed it goes first; it is their game.
+     */
+    const merged = []
+    for (const c of [...designers, ...it.creators, ...publishers]) {
+      if (!c?.name) continue
+      if (merged.some((m) => m.name.toLowerCase() === c.name.toLowerCase())) continue
+      merged.push(c)
+    }
+
+    return {
+      ...it,
+      // Wikidata's answer wins where it has one; this fills the silence.
+      year: it.year || parseYear(b.years?.value) || parseYear(b.dated?.value) || null,
+      creators: merged.slice(0, 3),
+      genres: it.genres.length ? it.genres : clean(b.genres?.value).slice(0, 3),
+      overview: b.abstract?.value || null,
+      poster_url: it.poster_url || b.thumb?.value || null,
+      runtime: it.runtime || minutes,
+    }
+  })
 }
