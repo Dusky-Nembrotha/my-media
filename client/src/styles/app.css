@@ -468,6 +468,8 @@ kbd {
 .input::placeholder, .textarea::placeholder { color: var(--ink-4); }
 .textarea { min-height: 86px; resize: vertical; line-height: 1.55; }
 .select { appearance: none; padding-right: 30px; background-image: none; cursor: pointer; }
+/* Sized to stand in a row of chips rather than in a form. */
+.select--sm { height: 32px; padding: 0 28px 0 10px; font-size: 12.5px; max-width: 190px; }
 .selectwrap { position: relative; }
 .selectwrap::after {
   content: "";

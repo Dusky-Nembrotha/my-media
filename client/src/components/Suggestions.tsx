@@ -5,6 +5,7 @@ import { PosterArt, PosterSkeleton } from './Poster'
 import { Preview } from './Preview'
 import type { PreviewTarget } from './Preview'
 import { Empty } from './Modal'
+import { GenrePick, type GenreCount } from './GenrePick'
 import { JustLogged } from './JustLogged'
 import type { LoggedThing } from './JustLogged'
 import { api } from '../lib/api'
@@ -28,6 +29,8 @@ interface RecResponse {
   angleBlurb?: string
   candidateCount?: number
   computed_at?: string
+  genres?: GenreCount[]
+  genre?: string | null
 }
 
 /**
@@ -55,6 +58,9 @@ export function Suggestions({ type }: { type: MediaType }) {
   // Which pick the sheet is showing, so logging from inside it marks the card.
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [sort, setSort] = useState<'match' | 'rating' | 'released'>('match')
+  const [genre, setGenre] = useState<string | null>(null)
+  // Kept aside so narrowing to a genre does not shorten the list of genres.
+  const [genres, setGenres] = useState<GenreCount[]>([])
   const [limit, setLimit] = useState(PAGE)
   const [more, setMore] = useState(false)
   // The ranking runs out eventually; stop asking once it has.
@@ -75,7 +81,11 @@ export function Suggestions({ type }: { type: MediaType }) {
     if (want > limit) setMore(true)
     else setLoading(true)
     try {
-      const res = await api.get<RecResponse>(`/recommendations?type=${type}&limit=${want}${force ? '&force=1' : ''}`)
+      const res = await api.get<RecResponse>(
+        `/recommendations?type=${type}&limit=${want}${force ? '&force=1' : ''}`
+        + `${genre ? `&genre=${encodeURIComponent(genre)}` : ''}`,
+      )
+      if (res.genres?.length) setGenres(res.genres)
       /*
        * Asking for more must not rearrange what you are already looking at.
        * The ranking is recomputed for the longer list and can shuffle near
@@ -105,7 +115,7 @@ export function Suggestions({ type }: { type: MediaType }) {
     setLimit(PAGE); setDone(false); inFlight.current = false
     void load(false, PAGE)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type])
+  }, [type, genre])
 
   /*
    * The card offers the one answer a suggestion usually wants — yes, I have
@@ -192,6 +202,7 @@ export function Suggestions({ type }: { type: MediaType }) {
               + `${data?.cached ? ' · cached' : ''}`}
         </span>
         <div className="u-row u-wrap" style={{ gap: 8 }}>
+          <GenrePick genres={genres} value={genre} onChange={setGenre} />
           <div className="chiprow">
             {([['match', 'Best match'], ['rating', 'Best rated'], ['released', 'Newest']] as const).map(([v, label]) => (
               <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>
@@ -231,9 +242,11 @@ export function Suggestions({ type }: { type: MediaType }) {
           title={`No ${meta.label.toLowerCase()} suggestions yet`}
           action={<button className="btn btn--primary" onClick={() => load(true)}>Try again</button>}
         >
-          {data?.profileThin
-            ? 'Rate a few things first — this works from your own ratings, not a generic popularity chart.'
-            : 'Either everything suggested is already in your library, or the metadata sources are having a quiet moment.'}
+          {genre
+            ? `Nothing suggested under ${genre} this time. Refresh looks again from a different angle.`
+            : data?.profileThin
+              ? 'Rate a few things first — this works from your own ratings, not a generic popularity chart.'
+              : 'Either everything suggested is already in your library, or the metadata sources are having a quiet moment.'}
         </Empty>
       ) : (
         <>

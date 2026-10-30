@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { all, get, run, json } from '../lib/db.js'
 import { recommend, blockRecommendation, profileSummary } from '../recommend.js'
+import { genreFacets, matchesGenre } from '../lib/genres.js'
 import { enrich } from '../providers/index.js'
 import { upsertWork } from '../lib/works.js'
 import { queueEnrichment } from '../enrich.js'
@@ -112,12 +113,26 @@ router.get('/recommendations', async (req, res) => {
      * keeps up rather than the list simply running dry.
      */
     const limit = Math.min(90, Math.max(1, Number(req.query.limit) || 12))
+    const wantGenre = String(req.query.genre || '').trim()
+
+    /*
+     * Filtering by genre needs more than a page to filter: a shelf of
+     * eighteen might hold two westerns, and showing two is not a page. Ask
+     * for the whole ranking and cut it down here — the list is cached either
+     * way, so the wider ask costs nothing after the first.
+     */
     const result = await recommend(type, {
-      limit,
+      limit: wantGenre ? 90 : limit,
       force: req.query.force === '1',
       breadth: Number(req.query.breadth) || Math.min(2.5, 1 + (limit - 18) / 36),
     })
-    res.json(result)
+
+    const genres = genreFacets(result.picks)
+    const picks = wantGenre
+      ? result.picks.filter((p) => matchesGenre(p, wantGenre))
+      : result.picks
+
+    res.json({ ...result, picks: picks.slice(0, limit), genres, genre: wantGenre || null })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

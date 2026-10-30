@@ -3,7 +3,7 @@ import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
 import { searchProviders, searchAllTypes, bookNoise, enrich, screenRatings, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks, imdbdata, steam, boardgame } from '../providers/index.js'
-import { uselessSubject } from '../recommend.js'
+import { foldGenres, genreFacets, matchesGenre } from '../lib/genres.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -158,73 +158,6 @@ router.get('/works', (req, res) => {
 })
 
 /** Facets for the filter bar. */
-/*
- * Fold a shelf's genres down to the ones worth offering.
- *
- * Open Library files one fantasy novel under "Fantasy", "Fantasy fiction",
- * "Epic Fantasy", "Fiction, fantasy, general" and "Fiction, fantasy, epic",
- * which is five entries in a dropdown for one idea and left no room for the
- * rest. Where every word of a shorter label appears in a longer one they are
- * the same shelf, and the short name is the one people would think to pick.
- *
- * Folding only the labels is enough: filtering already matches genres by
- * substring, so choosing "Fantasy" still finds everything filed under the
- * longer names.
- */
-/*
- * Words that describe the shelf rather than anything on it. Open Library
- * files plenty of these as subjects, and "Books" is not a genre of book.
- */
-const NOT_A_GENRE = /^(books?|literature|fiction|non-?fiction|general|miscellaneous|anthologies|collections?|readers?|texts?|series)$/i
-
-/*
- * Genres whose names contain another genre and mean something else entirely.
- *
- * "Fantasy fiction" is fantasy, so folding it in is right. "Science fiction"
- * is not science, and folding it in filed Abhorsen under the same heading as
- * a book about beavers. Structurally the two look identical — a genre plus
- * the word fiction — so no rule separates them and they have to be named.
- */
-const COMPOUND = new Set([
-  'science fiction', 'historical fiction', 'crime fiction', 'literary fiction',
-  'speculative fiction', 'detective fiction', 'war fiction', 'graphic novel',
-])
-
-const words = (g) => String(g).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-const tidy = (g) => String(g).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-
-function foldGenres(counts, titles = new Set()) {
-  const entries = [...counts.entries()]
-    .filter(([g]) => !uselessSubject(g))
-    /*
-     * Junk whole, and junk in parts: Open Library writes "Fiction / General",
-     * which is two shelf words with a slash between them and says no more
-     * than either alone.
-     */
-    .filter(([g]) => !NOT_A_GENRE.test(String(g).trim()))
-    .filter(([g]) => !words(g).every((w) => NOT_A_GENRE.test(w)))
-    /*
-     * A series is not a genre. Open Library files Dune's sequels under the
-     * subject "Dune", which then sat in the genre list between Fantasy and
-     * Science fiction as though it were one.
-     */
-    .filter(([g]) => !titles.has(String(g).trim().toLowerCase()))
-    .sort((a, b) => words(a[0]).length - words(b[0]).length || a[0].length - b[0].length)
-
-  const kept = []
-  for (const [label, count] of entries) {
-    const mine = words(label)
-    const protectedName = COMPOUND.has(tidy(label))
-    // A compound genre stands on its own, and nothing folds into it either.
-    const into = protectedName
-      ? kept.find((k) => tidy(k.label) === tidy(label))
-      : kept.find((k) => !k.protectedName && k.words.every((w) => mine.includes(w)))
-    if (into) into.count += count
-    else kept.push({ label, words: mine, count, protectedName })
-  }
-  return kept.sort((a, b) => b.count - a.count)
-}
-
 router.get('/facets', (req, res) => {
   const type = req.query.type && req.query.type !== 'all' ? req.query.type : null
   /*
@@ -1044,6 +977,16 @@ router.get('/hot', async (req, res) => {
     items = [...items].sort((a, b) => (b.external_rating ?? 0) - (a.external_rating ?? 0))
   }
 
+  /*
+   * What the chart contains, before any of it is filtered away — so the
+   * picker offers the genres that are actually in today's chart rather than
+   * a fixed list, and still offers them once one has been chosen.
+   */
+  const genres = genreFacets(items)
+
+  const wantGenre = String(req.query.genre || '').trim()
+  if (wantGenre) items = items.filter((it) => matchesGenre(it, wantGenre))
+
   // Page only once everything has been ordered.
   const total = items.length
   items = items.slice(offset, offset + limit)
@@ -1084,6 +1027,8 @@ router.get('/hot', async (req, res) => {
     type,
     source,
     sort,
+    genres,
+    genre: wantGenre || null,
     offset,
     hasMore: offset + limit < total,
     items: items.map((item) => {

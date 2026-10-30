@@ -4,6 +4,7 @@ import { Icon } from './Icon'
 import { PosterArt, PosterSkeleton } from './Poster'
 import { Empty } from './Modal'
 import { Preview } from './Preview'
+import { GenrePick, type GenreCount } from './GenrePick'
 import type { PreviewTarget } from './Preview'
 import { api, qs } from '../lib/api'
 import { useApp } from '../lib/store'
@@ -53,6 +54,8 @@ export function Hot({ type }: { type: MediaType }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
   const [sort, setSort] = useState<'hot' | 'rating' | 'released'>('hot')
+  const [genre, setGenre] = useState<string | null>(null)
+  const [genres, setGenres] = useState<GenreCount[]>([])
 
   const sentinel = useRef<HTMLDivElement>(null)
   const offset = useRef(0)
@@ -63,10 +66,14 @@ export function Hot({ type }: { type: MediaType }) {
     inFlight.current = true
     if (offset.current > 0) setMore(true)
     try {
-      const res = await api.get<{ source: string | null; items: HotItem[]; hasMore: boolean; unsupported?: boolean }>(
-        `/hot${qs({ type, limit: BATCH, offset: offset.current, sort })}`,
+      const res = await api.get<{
+        source: string | null; items: HotItem[]; hasMore: boolean
+        unsupported?: boolean; genres?: GenreCount[]
+      }>(
+        `/hot${qs({ type, limit: BATCH, offset: offset.current, sort, genre })}`,
       )
       setSource(res.source)
+      if (res.genres?.length) setGenres(res.genres)
       setUnsupported(Boolean(res.unsupported))
       setItems((prev) => {
         // The charts shift while you scroll, so guard against repeats.
@@ -83,7 +90,7 @@ export function Hot({ type }: { type: MediaType }) {
       setLoading(false)
       setMore(false)
     }
-  }, [type, done, sort, toast])
+  }, [type, done, sort, genre, toast])
 
   // Start again from the top whenever the library changes.
   // Start again from the top when the library or the ordering changes.
@@ -93,7 +100,7 @@ export function Hot({ type }: { type: MediaType }) {
     setItems([]); setDone(false); setLoading(true); setAdded({})
     void loadMore()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, sort])
+  }, [type, sort, genre])
 
   // Top up when the bottom of the list comes into view.
   useEffect(() => {
@@ -128,6 +135,17 @@ export function Hot({ type }: { type: MediaType }) {
     return <div className="grid">{Array.from({ length: 12 }, (_, i) => <PosterSkeleton key={i} aspect={meta.aspect} />)}</div>
   }
 
+  if (!unsupported && genre && !items.length && !loading) {
+    return (
+      <>
+        <div className="u-spread u-wrap" style={{ gap: 10, margin: '4px 0 14px' }}>
+          <span className="u-sm u-mut">Nothing in the chart under {genre} today.</span>
+          <GenrePick genres={genres} value={genre} onChange={setGenre} />
+        </div>
+      </>
+    )
+  }
+
   if (unsupported || !items.length) {
     return (
       <Empty icon="sparkle" title={`No chart for ${meta.label.toLowerCase()}`}>
@@ -148,10 +166,13 @@ export function Hot({ type }: { type: MediaType }) {
         <span className="u-sm u-mut">
           What is being watched, read and talked about most right now · {source}
         </span>
-        <div className="chiprow">
-          {([['hot', 'Hottest'], ['rating', 'Best rated'], ['released', 'Newest']] as const).map(([v, label]) => (
-            <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>
-          ))}
+        <div className="u-row u-wrap" style={{ gap: 8 }}>
+          <GenrePick genres={genres} value={genre} onChange={setGenre} />
+          <div className="chiprow">
+            {([['hot', 'Hottest'], ['rating', 'Best rated'], ['released', 'Newest']] as const).map(([v, label]) => (
+              <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>
+            ))}
+          </div>
         </div>
       </div>
 
