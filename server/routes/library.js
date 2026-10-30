@@ -3,6 +3,7 @@ import { all, get, run, json } from '../lib/db.js'
 import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.js'
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
 import { searchProviders, searchAllTypes, bookNoise, enrich, screenRatings, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks, imdbdata, steam, boardgame } from '../providers/index.js'
+import { uselessSubject } from '../recommend.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -157,13 +158,89 @@ router.get('/works', (req, res) => {
 })
 
 /** Facets for the filter bar. */
+/*
+ * Fold a shelf's genres down to the ones worth offering.
+ *
+ * Open Library files one fantasy novel under "Fantasy", "Fantasy fiction",
+ * "Epic Fantasy", "Fiction, fantasy, general" and "Fiction, fantasy, epic",
+ * which is five entries in a dropdown for one idea and left no room for the
+ * rest. Where every word of a shorter label appears in a longer one they are
+ * the same shelf, and the short name is the one people would think to pick.
+ *
+ * Folding only the labels is enough: filtering already matches genres by
+ * substring, so choosing "Fantasy" still finds everything filed under the
+ * longer names.
+ */
+/*
+ * Words that describe the shelf rather than anything on it. Open Library
+ * files plenty of these as subjects, and "Books" is not a genre of book.
+ */
+const NOT_A_GENRE = /^(books?|literature|fiction|non-?fiction|general|miscellaneous|anthologies|collections?|readers?|texts?|series)$/i
+
+/*
+ * Genres whose names contain another genre and mean something else entirely.
+ *
+ * "Fantasy fiction" is fantasy, so folding it in is right. "Science fiction"
+ * is not science, and folding it in filed Abhorsen under the same heading as
+ * a book about beavers. Structurally the two look identical — a genre plus
+ * the word fiction — so no rule separates them and they have to be named.
+ */
+const COMPOUND = new Set([
+  'science fiction', 'historical fiction', 'crime fiction', 'literary fiction',
+  'speculative fiction', 'detective fiction', 'war fiction', 'graphic novel',
+])
+
+const words = (g) => String(g).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+const tidy = (g) => String(g).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+function foldGenres(counts, titles = new Set()) {
+  const entries = [...counts.entries()]
+    .filter(([g]) => !uselessSubject(g))
+    /*
+     * Junk whole, and junk in parts: Open Library writes "Fiction / General",
+     * which is two shelf words with a slash between them and says no more
+     * than either alone.
+     */
+    .filter(([g]) => !NOT_A_GENRE.test(String(g).trim()))
+    .filter(([g]) => !words(g).every((w) => NOT_A_GENRE.test(w)))
+    /*
+     * A series is not a genre. Open Library files Dune's sequels under the
+     * subject "Dune", which then sat in the genre list between Fantasy and
+     * Science fiction as though it were one.
+     */
+    .filter(([g]) => !titles.has(String(g).trim().toLowerCase()))
+    .sort((a, b) => words(a[0]).length - words(b[0]).length || a[0].length - b[0].length)
+
+  const kept = []
+  for (const [label, count] of entries) {
+    const mine = words(label)
+    const protectedName = COMPOUND.has(tidy(label))
+    // A compound genre stands on its own, and nothing folds into it either.
+    const into = protectedName
+      ? kept.find((k) => tidy(k.label) === tidy(label))
+      : kept.find((k) => !k.protectedName && k.words.every((w) => mine.includes(w)))
+    if (into) into.count += count
+    else kept.push({ label, words: mine, count, protectedName })
+  }
+  return kept.sort((a, b) => b.count - a.count)
+}
+
 router.get('/facets', (req, res) => {
   const type = req.query.type && req.query.type !== 'all' ? req.query.type : null
+  /*
+   * The same shelf rule the grid uses. Audiobooks are stored as books, so a
+   * plain type match found none of them and the audiobook library was offered
+   * no filters at all.
+   */
+  const where = type ? (SHELF[type] || 'w.type = ?') : '1 = 1'
+  const params = type && !SHELF[type] ? [type] : []
   const rows = all(
-    `SELECT w.genres, w.creators, w.year FROM works w
-      WHERE (? IS NULL OR w.type = ?) AND EXISTS (SELECT 1 FROM entries e WHERE e.work_id = w.id)`,
-    type, type,
+    `SELECT w.title, w.genres, w.creators, w.year FROM works w
+      WHERE ${where} AND EXISTS (SELECT 1 FROM entries e WHERE e.work_id = w.id)`,
+    ...params,
   )
+  // What you own, to recognise a series name masquerading as a genre.
+  const titles = new Set(rows.map((r) => String(r.title || '').trim().toLowerCase()).filter(Boolean))
   const genres = new Map()
   const creators = new Map()
   const decades = new Map()
@@ -181,7 +258,7 @@ router.get('/facets', (req, res) => {
   }
   const top = (map, n) => [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
   res.json({
-    genres: top(genres, 30).map(([name, count]) => ({ name, count })),
+    genres: foldGenres(genres, titles).slice(0, 30).map(({ label, count }) => ({ name: label, count })),
     creators: top(creators, 30).map(([key, count]) => ({ role: key.split('|')[0], name: key.split('|')[1], count })),
     decades: [...decades.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([name, count]) => ({ name, count })),
   })

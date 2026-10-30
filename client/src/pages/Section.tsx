@@ -399,20 +399,23 @@ export function SectionPage({ type }: { type: MediaType }) {
               </div>
             </div>
 
-            <div className="field">
-              <label htmlFor="f-genre">Genre</label>
-              <div className="selectwrap">
-                <select
-                  id="f-genre"
-                  className="select"
-                  value={filters.genre ?? ''}
-                  onChange={(e) => setFilters((f) => ({ ...f, genre: e.target.value || null }))}
-                >
-                  <option value="">All genres</option>
-                  {(facets.data?.genres ?? []).map((g) => <option key={g.name} value={g.name}>{g.name} ({g.count})</option>)}
-                </select>
+            {/* A library with nothing filed under a genre gets no dead control. */}
+            {(facets.data?.genres ?? []).length > 0 && (
+              <div className="field">
+                <label htmlFor="f-genre">Genre</label>
+                <div className="selectwrap">
+                  <select
+                    id="f-genre"
+                    className="select"
+                    value={filters.genre ?? ''}
+                    onChange={(e) => setFilters((f) => ({ ...f, genre: e.target.value || null }))}
+                  >
+                    <option value="">All genres</option>
+                    {(facets.data?.genres ?? []).map((g) => <option key={g.name} value={g.name}>{g.name} ({g.count})</option>)}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="field">
               <label htmlFor="f-decade">Decade</label>
