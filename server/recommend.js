@@ -4,6 +4,7 @@ import { systemUserId } from './lib/user.js'
 import { tmdb, itunes, ol, mb, tvmaze, wiki, gbooks, steam, boardgame, bookNoise } from './providers/index.js'
 import { coverUrl } from './providers/openlibrary.js'
 import * as wikidata from './providers/wikidata.js'
+import * as bgg from './providers/bgg.js'
 import * as cf from './lib/cf.js'
 
 /* ------------------------------------------------------------------ profile */
@@ -861,6 +862,21 @@ export async function candidatesForType(type, profile, { breadth = 1, crowd = nu
       all("SELECT json_extract(metadata, '$.bgg_id') bgg FROM works WHERE type = 'boardgame'")
         .map((r) => r.bgg).filter(Boolean).map(String),
     )
+
+    const bggHot = bgg.hasKey() ? await bgg.hotDetailed(Math.round(40 * breadth)).catch(() => null) : null
+
+    /*
+     * What BoardGameGeek is talking about, as a pool to rank against.
+     *
+     * Every one of them arrives with its categories and its mechanics, which
+     * is the first time this shelf has had anything to match on besides a
+     * designer — "worker placement" and "deduction" are what people mean when
+     * they say what they like about a game.
+     */
+    if (bggHot) {
+      push(bggHot.filter((g) => !g.metadata?.bgg_id || !owned.has(String(g.metadata.bgg_id))),
+        'genre', null, null, null)
+    }
 
     for (const c of creators.slice(0, 4)) {
       const { role, name } = parseCreatorKey(c.key)

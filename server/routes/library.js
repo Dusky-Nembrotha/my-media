@@ -4,6 +4,7 @@ import { WORK_CARD_SQL, workWithStats, upsertWork, hydrate } from '../lib/works.
 import { TYPES, SECTIONS, normaliseTitle, today, clamp } from '../lib/util.js'
 import { searchProviders, searchAllTypes, bookNoise, enrich, screenRatings, tmdb, ol, itunes, mb, wiki, wikidata, omdb, gbooks, imdbdata, steam, boardgame } from '../providers/index.js'
 import { foldGenres, genreFacets, matchesGenre } from '../lib/genres.js'
+import * as bgg from '../providers/bgg.js'
 import { cacheArtwork, cachedPathFor } from '../lib/artwork.js'
 import { qualityOf } from '../lib/imagesize.js'
 import { queueEnrichment, prioritise } from '../enrich.js'
@@ -816,6 +817,10 @@ router.get('/hot', async (req, res) => {
       items = await ol.trending('weekly', { limit: pool, type })
     } else if (['album', 'track', 'podcast'].includes(type)) {
       items = await itunes.charts(type, { limit: pool, country: (setting('watch_region') || 'GB').toLowerCase() })
+    } else if (type === 'boardgame') {
+      // BoardGameGeek's own hotness list, which is the thing itself rather
+      // than a proxy for it — nobody else keeps one.
+      items = await bgg.hotDetailed(Math.min(pool, 50))
     } else if (type === 'game') {
       // Peak concurrent players this week: how many people were actually in
       // the game, rather than how many bought it or how it reviewed.
@@ -832,7 +837,11 @@ router.get('/hot', async (req, res) => {
      * anonymous requests — so the honest answer is to say so and wait for a
      * key rather than invent a chart out of something that is not one.
      */
-    return res.json({ type, source: null, items: [], offset, hasMore: false, unsupported: type === 'boardgame' })
+    return res.json({
+      type, source: null, items: [], offset, hasMore: false,
+      // Only without a key: with one, an empty chart is just a quiet week.
+      unsupported: type === 'boardgame' && !bgg.hasKey(),
+    })
   }
 
   /*
@@ -960,7 +969,8 @@ router.get('/hot', async (req, res) => {
       .map((r) => `${r.type}|${normaliseTitle(r.title)}`),
   )
 
-  const source = type === 'game' ? 'Steam, by players right now'
+  const source = type === 'boardgame' ? 'BoardGameGeek, this week'
+    : type === 'game' ? 'Steam, by players right now'
     : (type === 'film' || type === 'tv') ? (wikiSignal ? 'TMDB and Wikipedia' : 'TMDB')
     : (type === 'book' || type === 'audiobook') ? 'Open Library'
       : 'Apple'

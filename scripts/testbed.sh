@@ -46,7 +46,7 @@ case "$cmd" in
             const db = new DatabaseSync("data/shelved.db", { readOnly: true });
             const out = {};
             for (const r of db.prepare("SELECT key, value FROM settings").all()) {
-              if (["tmdb_api_key", "omdb_api_key"].includes(r.key) && r.value) out[r.key] = r.value;
+              if (["tmdb_api_key", "omdb_api_key", "google_books_api_key", "bgg_api_key"].includes(r.key) && r.value) out[r.key] = r.value;
             }
             console.log(JSON.stringify(out));
           } catch { console.log("{}"); }

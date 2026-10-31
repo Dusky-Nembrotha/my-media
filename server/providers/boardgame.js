@@ -19,6 +19,7 @@ import { fetchText } from '../lib/fetchv4.js'
 import { fetchJson } from '../lib/http.js'
 import { normaliseTitle, parseYear } from '../lib/util.js'
 import { setting } from '../lib/settings.js'
+import * as bgg from './bgg.js'
 
 const SPARQL = 'https://query.wikidata.org/sparql'
 const DBPEDIA = 'https://dbpedia.org/sparql'
@@ -161,6 +162,15 @@ async function run(filter, { limit, term }) {
 
 export async function search(term, limit = 12) {
   if (!term) return []
+  /*
+   * BoardGameGeek when it will have us. It knows every game rather than the
+   * few hundred with a Wikipedia article, and knows the designers, the
+   * mechanics, the weight and the box — none of which Wikidata holds.
+   */
+  if (bgg.hasKey()) {
+    const hits = await bgg.search(term, limit)
+    if (hits.length) return hits
+  }
   return run(`FILTER(CONTAINS(LCASE(?gameLabel), "${esc(String(term).toLowerCase())}"))`, { limit, term })
 }
 
