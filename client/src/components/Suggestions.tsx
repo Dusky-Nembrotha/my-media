@@ -39,7 +39,13 @@ interface RecResponse {
  * Lives as a tab inside each library, next to what you've finished and what
  * you mean to get to.
  */
-export function Suggestions({ type }: { type: MediaType }) {
+export function Suggestions({ type, genre = null, onGenre }: {
+  type: MediaType
+  /* Owned by the library page so it is shared by every tab and survives the
+     back button; see SectionPage. */
+  genre?: string | null
+  onGenre?: (genre: string | null) => void
+}) {
   const meta = SECTION_META[type]
   const { toast, refresh, settings } = useApp()
   const [data, setData] = useState<RecResponse | null>(null)
@@ -58,7 +64,6 @@ export function Suggestions({ type }: { type: MediaType }) {
   // Which pick the sheet is showing, so logging from inside it marks the card.
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [sort, setSort] = useState<'match' | 'rating' | 'released'>('match')
-  const [genre, setGenre] = useState<string | null>(null)
   // Kept aside so narrowing to a genre does not shorten the list of genres.
   const [genres, setGenres] = useState<GenreCount[]>([])
   const [limit, setLimit] = useState(PAGE)
@@ -202,7 +207,7 @@ export function Suggestions({ type }: { type: MediaType }) {
               + `${data?.cached ? ' · cached' : ''}`}
         </span>
         <div className="u-row u-wrap" style={{ gap: 8 }}>
-          <GenrePick genres={genres} value={genre} onChange={setGenre} />
+          <GenrePick genres={genres} value={genre} onChange={(g) => onGenre?.(g)} />
           <div className="chiprow">
             {([['match', 'Best match'], ['rating', 'Best rated'], ['released', 'Newest']] as const).map(([v, label]) => (
               <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>

@@ -40,7 +40,13 @@ const BATCH = 18
  * the IMDb score on each card costs a lookup and fetching two hundred of them
  * for a list nobody scrolls would be wasteful.
  */
-export function Hot({ type }: { type: MediaType }) {
+export function Hot({ type, genre = null, onGenre }: {
+  type: MediaType
+  /* Owned by the library page so it is shared by every tab and survives the
+     back button; see SectionPage. */
+  genre?: string | null
+  onGenre?: (genre: string | null) => void
+}) {
   const meta = SECTION_META[type]
   const { toast, refresh } = useApp()
 
@@ -54,7 +60,6 @@ export function Hot({ type }: { type: MediaType }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
   const [sort, setSort] = useState<'hot' | 'rating' | 'released'>('hot')
-  const [genre, setGenre] = useState<string | null>(null)
   const [genres, setGenres] = useState<GenreCount[]>([])
 
   const sentinel = useRef<HTMLDivElement>(null)
@@ -140,7 +145,7 @@ export function Hot({ type }: { type: MediaType }) {
       <>
         <div className="u-spread u-wrap" style={{ gap: 10, margin: '4px 0 14px' }}>
           <span className="u-sm u-mut">Nothing in the chart under {genre} today.</span>
-          <GenrePick genres={genres} value={genre} onChange={setGenre} />
+          <GenrePick genres={genres} value={genre} onChange={(g) => onGenre?.(g)} />
         </div>
       </>
     )
@@ -167,7 +172,7 @@ export function Hot({ type }: { type: MediaType }) {
           What is being watched, read and talked about most right now · {source}
         </span>
         <div className="u-row u-wrap" style={{ gap: 8 }}>
-          <GenrePick genres={genres} value={genre} onChange={setGenre} />
+          <GenrePick genres={genres} value={genre} onChange={(g) => onGenre?.(g)} />
           <div className="chiprow">
             {([['hot', 'Hottest'], ['rating', 'Best rated'], ['released', 'Newest']] as const).map(([v, label]) => (
               <button key={v} className={`chip${sort === v ? ' is-on' : ''}`} onClick={() => setSort(v)}>{label}</button>

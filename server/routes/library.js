@@ -102,6 +102,51 @@ const SHELF = {
     OR NOT EXISTS (SELECT 1 FROM entries e3 WHERE e3.work_id = w.id))`,
 }
 
+/*
+ * Do you already have this?
+ *
+ * Title alone is not enough. There are four films called Resident Evil, and
+ * owning the 2002 one had the 2026 one badged as yours in the chart and its
+ * preview opening the wrong film. A remake is not the thing it remade.
+ *
+ * A year within one of the asked-for year is the same release: sources
+ * disagree about festival and general release by a few months. A title match
+ * with no year recorded is accepted only when nothing better is found, since
+ * entries made before the field existed have none.
+ */
+function ownedIndex() {
+  const exact = new Map()
+  const byTitle = new Map()
+  for (const w of all('SELECT id, type, title, year FROM works')) {
+    const base = `${w.type}|${normaliseTitle(w.title)}`
+    if (w.year != null) {
+      for (const y of [w.year - 1, w.year, w.year + 1]) {
+        if (!exact.has(`${base}|${y}`)) exact.set(`${base}|${y}`, w.id)
+      }
+    }
+    if (!byTitle.has(base)) byTitle.set(base, { id: w.id, year: w.year })
+  }
+  return {
+    get: (key, year) => {
+      if (year == null) return byTitle.get(key)?.id ?? null
+      const hit = exact.get(`${key}|${year}`)
+      if (hit) return hit
+      /*
+       * No year on the entry means it predates the field, so a title match is
+       * the best anyone can do. A year that simply differs is a different
+       * film, and saying otherwise is how the 2026 Resident Evil came to be
+       * badged as the 2002 one.
+       */
+      const loose = byTitle.get(key)
+      return loose && loose.year == null ? loose.id : null
+    },
+  }
+}
+
+function ownedId(type, title, year) {
+  return ownedIndex().get(`${type}|${normaliseTitle(title)}`, year ?? null)
+}
+
 /** GET /api/works — the grid behind every section page. */
 router.get('/works', (req, res) => {
   const { type, q, genre, creator, status, sort = 'recent', year, decade } = req.query
@@ -748,7 +793,7 @@ router.get('/works/:id/series', async (req, res) => {
   }
 
   const resolved = parts.map((p) => {
-    const candidate = owned.get(`${p.type}|${normaliseTitle(p.title)}`)
+    const candidate = owned.get(`${p.type}|${normaliseTitle(p.title)}`, p.year ?? null)
     const mine = candidate && sameHand(candidate, p) ? candidate : null
     return {
       ...p,
@@ -961,9 +1006,7 @@ router.get('/hot', async (req, res) => {
     })
   }
 
-  const owned = new Map(
-    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
-  )
+  const owned = ownedIndex()
   const onList = new Set(
     all("SELECT ifnull(type,'') type, title FROM recs WHERE status = 'open'")
       .map((r) => `${r.type}|${normaliseTitle(r.title)}`),
@@ -1043,7 +1086,7 @@ router.get('/hot', async (req, res) => {
     hasMore: offset + limit < total,
     items: items.map((item) => {
       const key = `${type}|${normaliseTitle(item.title)}`
-      const id = owned.get(key) ?? null
+      const id = owned.get(key, item.year ?? null)
       return {
         type,
         title: item.title,
@@ -1096,10 +1139,9 @@ router.get('/preview', async (req, res) => {
   }
 
   // Already yours? Then say so and point at it rather than showing a stranger.
-  const mine = get(
-    'SELECT id FROM works WHERE type = ? AND lower(title) = ? LIMIT 1',
-    type, title.toLowerCase(),
-  )
+  // The year decides it: four different films are called Resident Evil.
+  const mineId = ownedId(type, found?.title || title, found?.year ?? year)
+  const mine = mineId ? { id: mineId } : null
 
   /*
    * The same things a work page shows, for something you do not own: where it
@@ -1123,9 +1165,7 @@ router.get('/preview', async (req, res) => {
       : [],
   ])
 
-  const owned = new Map(
-    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
-  )
+  const owned = ownedIndex()
 
   res.json({
     found: Boolean(found),
@@ -1139,7 +1179,7 @@ router.get('/preview', async (req, res) => {
       year: x.year ?? null,
       poster_url: x.poster_url ?? null,
       creators: (x.creators || []).filter((c) => c.role !== 'Cast').slice(0, 1),
-      work_id: owned.get(`${type}|${normaliseTitle(x.title)}`) ?? null,
+      work_id: owned.get(`${type}|${normaliseTitle(x.title)}`, x.year ?? null),
     })),
     preview: {
       type,
@@ -1210,9 +1250,7 @@ router.get('/creator/profile', async (req, res) => {
     }
   }
 
-  const owned = new Map(
-    all('SELECT id, type, title FROM works').map((w) => [`${w.type}|${normaliseTitle(w.title)}`, w.id]),
-  )
+  const owned = ownedIndex()
   const onList = new Set(
     all("SELECT ifnull(type,'') type, title FROM recs WHERE status = 'open'")
       .map((r) => `${r.type}|${normaliseTitle(r.title)}`),
@@ -1226,7 +1264,7 @@ router.get('/creator/profile', async (req, res) => {
     if (seen.has(key)) continue
     if ((type === 'book' || type === 'audiobook') && bookNoise(w.title)) continue
     seen.add(key)
-    const id = owned.get(`${type}|${key}`) ?? null
+    const id = owned.get(`${type}|${key}`, w.year ?? null)
     const place = order.get(key) || {}
     clean.push({
       type,

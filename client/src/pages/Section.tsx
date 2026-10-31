@@ -55,7 +55,32 @@ const EMPTY: Filters = { format: null, creator: null, genre: null, decade: null,
 
 export function SectionPage({ type }: { type: MediaType }) {
   const meta = SECTION_META[type]
-  const [tab, setTab] = useState<Tab>('done')
+  const [params, setParams] = useSearchParams()
+
+  /*
+   * Which tab, and which genre, live in the address rather than in this
+   * component.
+   *
+   * Opening a film from Suggestions and pressing back used to land on
+   * Watched, because the tab was state and state does not survive leaving the
+   * page. And a genre chosen on Hot meant nothing on Suggestions, because
+   * each kept its own. In the URL both are shared by every tab and restored
+   * by the back button, which is what a back button is for.
+   */
+  const tab = (['done', 'planned', 'suggested', 'hot'].includes(params.get('tab') || '')
+    ? params.get('tab')
+    : 'done') as Tab
+
+  const patchParams = (changes: Record<string, string | null>, replace = false) => {
+    const next = new URLSearchParams(params)
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v)
+      else next.delete(k)
+    }
+    setParams(next, { replace })
+  }
+
+  const setTab = (t: Tab) => patchParams({ tab: t === 'done' ? null : t })
   const [sort, setSort] = useState<string>('recent')
   // Choosing the sort you are already on turns it round.
   const [dir, setDir] = useState<'desc' | 'asc'>('desc')
@@ -64,21 +89,27 @@ export function SectionPage({ type }: { type: MediaType }) {
   const [view, setView] = useState<'grid' | 'list'>(() => (localStorage.getItem('mm-view') as 'grid' | 'list') || 'grid')
   const [limit, setLimit] = useState(60)
   const [q, setQ] = useState('')
-  const [params, setParams] = useSearchParams()
   const [showMore, setShowMore] = useState(false)
   // Selecting several at once, so a bad import can be cleared in one go.
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [confirmBulk, setConfirmBulk] = useState(false)
   const selecting = selected.size > 0
 
-  // A ?creator= or ?genre= link (from a work page) is a filter request.
+  // A ?creator= link from a work page is a filter request, and lands you on
+  // what you have already seen rather than on what you might.
   const urlCreator = params.get('creator')
   const urlGenre = params.get('genre')
   useEffect(() => {
-    if (!urlCreator && !urlGenre) return
-    setFilters((f) => ({ ...f, creator: urlCreator ?? f.creator, genre: urlGenre ?? f.genre }))
-    setTab('done')
-  }, [urlCreator, urlGenre])
+    if (!urlCreator) return
+    setFilters((f) => ({ ...f, creator: urlCreator }))
+    patchParams({ tab: null }, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCreator])
+
+  // The genre belongs to the whole library, so the grid reads it from there.
+  useEffect(() => {
+    setFilters((f) => (f.genre === (urlGenre ?? null) ? f : { ...f, genre: urlGenre ?? null }))
+  }, [urlGenre])
 
   const query = qs({
     type, sort, dir, limit, q: q.trim() || null,
@@ -131,8 +162,9 @@ export function SectionPage({ type }: { type: MediaType }) {
       <div className="page">
         <SectionTabs type={type} tab={tab} setTab={setTab} />
         {tab === 'planned' ? <PlannedList type={type} />
-          : tab === 'hot' ? <Hot type={type} />
-            : <Suggestions type={type} />}
+          : tab === 'hot'
+            ? <Hot type={type} genre={urlGenre} onGenre={(g) => patchParams({ genre: g })} />
+            : <Suggestions type={type} genre={urlGenre} onGenre={(g) => patchParams({ genre: g })} />}
       </div>
     )
   }
